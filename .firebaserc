@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "kira26",
+    "test": "kira26"
+  },
+  "targets": {},
+  "etags": {}
+}
