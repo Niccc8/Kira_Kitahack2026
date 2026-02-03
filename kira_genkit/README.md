@@ -22,5 +22,5 @@
    ```bash
    npx genkit start -- npx tsx --watch src/index.ts
    ```
-   NOTE: the genkit-sample.ts is a functional one, from Genkit docs whereas the index.ts is in progress (ntg will works for now). 
+   NOTE: the genkit-sample.ts is a testing, from Genkit docs whereas the index.ts is the real work for Kira KitaHAck 2026. 
    Click on the link generated (eg: http://localhost:4000)
