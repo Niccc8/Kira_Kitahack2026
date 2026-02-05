@@ -1,0 +1,4 @@
+dotenv
+@genkit-ai/google-genai
+genkit 
+zod

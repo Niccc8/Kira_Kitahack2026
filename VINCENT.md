@@ -34,3 +34,15 @@ i  Emulator UI already enabled with port: (automatic)
 ✅ Emulator UI running → http://127.0.0.1:4000
 ✅ “✔ All emulators ready!
 - view emulator UI at http://127.0.0.1:4000/
+
+6. create mock dataset for testing
+- create seed.ts
+- run: npx ts-node seed.ts
+
+7. paste original code in index.ts
+
+8. paste updated test run code in run_agent.ts
+- cd into functions folder and run the following
+  - npm install @genkit-ai/google-genai
+  - npm install genkit zod
+  - verify: npm list @genkit-ai/google-genai
