@@ -1,0 +1,33 @@
+{
+  "name": "kira_kitahack2026",
+  "version": "1.0.0",
+  "description": "Kira is a tool for Malaysian SMEs to track carbon emissions and identify tax savings (GITA).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Niccc8/Kira_Kitahack2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Niccc8/Kira_Kitahack2026/issues"
+  },
+  "homepage": "https://github.com/Niccc8/Kira_Kitahack2026#readme",
+  "dependencies": {
+    "@genkit-ai/google-genai": "^1.28.0",
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.5",
+    "genkit": "^1.28.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
