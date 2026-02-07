@@ -24,6 +24,7 @@ const ai = genkit({
 
 // --- TOOLS DEFINITION ---
 
+// --- TOOL 1: SEARCH MYHIJAU ---
 const searchMyHijauTool = ai.defineTool(
   {
     name: 'searchMyHijauDirectory',
@@ -45,6 +46,7 @@ const searchMyHijauTool = ai.defineTool(
   }
 );
 
+  // SINGLE KEYWORD SEARCH
   // const searchMyHijauTool = ai.defineTool(
   //   {
   //     name: 'searchMyHijauDirectory',
@@ -78,6 +80,7 @@ const searchMyHijauTool = ai.defineTool(
   //   }
   // );
 
+  // --- TOOL 2: TAX SIMULATOR ---
 const taxSimulatorTool = ai.defineTool(
   {
     name: 'simulateTaxImpact',
@@ -100,6 +103,96 @@ const taxSimulatorTool = ai.defineTool(
     return { grossLiability: gross, savings: gross - net };
   }
 );
+
+// --- TOOL 3: INVESTMENT SIMULATOR (NEW) ---
+const investmentSimulatorTool = ai.defineTool(
+  {
+    name: 'simulateInvestment',
+    description: 'Calculates ROI and payback period for green assets (Solar, LED, etc).',
+    inputSchema: z.object({
+      assetType: z.string().describe('Type of asset (e.g. "solar", "led")'),
+      estimatedCost: z.number().optional().describe('Cost in RM (optional, AI can estimate if missing)'),
+    }),
+    outputSchema: z.object({
+      estimatedCost: z.number(),
+      taxSavings: z.number(),
+      paybackYears: z.number(),
+      summary: z.string(),
+    }),
+  },
+  async ({ assetType, estimatedCost }) => {
+    console.log(`[TOOL] Simulating Investment for: ${assetType}`);
+    
+    // Mock Knowledge Base for MVP defaults
+    const defaults: Record<string, { cost: number, annualSavings: number }> = {
+      'solar': { cost: 50000, annualSavings: 15000 },
+      'led': { cost: 10000, annualSavings: 4000 },
+      'chiller': { cost: 150000, annualSavings: 45000 },
+    };
+
+    // Find closest match or default to solar
+    const key = Object.keys(defaults).find(k => assetType.toLowerCase().includes(k)) || 'solar';
+    const data = defaults[key];
+
+    const cost = estimatedCost || data.cost;
+    const annualSavings = data.annualSavings;
+
+    // GITA Logic: 24% Corporate Tax Rate * 100% Investment Allowance
+    const taxSavings = cost * 0.24; 
+    const netCost = cost - taxSavings;
+    const payback = netCost / annualSavings;
+
+    return {
+      estimatedCost: cost,
+      taxSavings,
+      paybackYears: parseFloat(payback.toFixed(1)),
+      summary: `Asset: ${assetType}. Net Cost after Tax: RM${netCost}. Payback: ${payback.toFixed(1)} years.`
+    };
+  }
+);
+
+// --- TOOL 4: INDUSTRY BENCHMARK (NEW) ---
+const industryBenchmarkTool = ai.defineTool(
+  {
+    name: 'getIndustryBenchmark',
+    description: 'Compares user carbon intensity vs industry average.',
+    inputSchema: z.object({
+      userId: z.string(),
+    }),
+    outputSchema: z.object({
+      userIntensity: z.number(),
+      industryAverage: z.number(),
+      performance: z.string(),
+    }),
+  },
+  async ({ userId }) => {
+    console.log(`[TOOL] Benchmarking User: ${userId}`);
+    const userDoc = await db.collection('users').doc(userId).get();
+    const userData = userDoc.data();
+    
+    if (!userData || !userData.industry) throw new Error("User industry not found");
+
+    // Calculate Intensity: (Total Emissions in kg) / Revenue
+    // 1 Tonne = 1000 kg
+    const userIntensity = (userData.totalEmissions * 1000) / userData.annualRevenue;
+
+    // Fetch Industry Stat
+    const statsDoc = await db.collection('industry_stats').doc(userData.industry).get();
+    const avgIntensity = statsDoc.exists ? statsDoc.data()?.averageIntensity : 0.0005;
+
+    // Compare
+    const isGood = userIntensity < avgIntensity;
+    const performance = isGood ? "Better (Lower Carbon)" : "Worse (Higher Carbon)";
+    const percentDiff = ((Math.abs(userIntensity - avgIntensity) / avgIntensity) * 100).toFixed(0);
+
+    return {
+      userIntensity,
+      industryAverage: avgIntensity,
+      performance: `${percentDiff}% ${performance} than average.`
+    };
+  }
+);
+
 
 // --- THE AGENT FLOW ---
 
@@ -128,7 +221,7 @@ const wiraBotFlow = ai.defineFlow(
         Goal: Minimize carbon tax liability.
         User Query: ${message}
       `,
-      tools: [searchMyHijauTool, taxSimulatorTool], 
+      tools: [searchMyHijauTool, taxSimulatorTool, investmentSimulatorTool, industryBenchmarkTool], 
     });
 
     return text;
@@ -149,8 +242,18 @@ async function main() {
   // console.log("Response 2:", response2);
 
   // TEST 3: Tool Usage (Tax Calculation)
-  const response3 = await wiraBotFlow({ userId, message: "If the carbon tax is RM 35 per tonne, how much will I pay?" });
-  console.log("Response 3:", response3);
+  // const response3 = await wiraBotFlow({ userId, message: "If the carbon tax is RM 35 per tonne, how much will I pay?" });
+  // console.log("Response 3:", response3);
+  
+  // TEST 4: Investment Simulator
+  console.log("\n--- TEST 4: Investment Simulator ---");
+  const res4 = await wiraBotFlow({ userId, message: "Is it worth investing in solar panels?" });
+  console.log("Response:", res4);
+
+  // TEST 5: Industry Benchmark
+  console.log("\n--- TEST 5: Industry Benchmark ---");
+  const res5 = await wiraBotFlow({ userId, message: "How does my carbon footprint compare to other manufacturers?" });
+  console.log("Response:", res5);
 }
 
 main().catch(console.error);

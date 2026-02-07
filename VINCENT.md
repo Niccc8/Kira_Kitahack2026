@@ -71,3 +71,21 @@ Would you like me to proceed with that simulation?
 Context: Industry: Manufacturing, Annual Emissions: 1440t.
 [TOOL] Simulating Tax for User: user123 at Rate: 35
 Response 3: Your carbon tax liability will be RM 50,400.
+
+--- TEST 4: Investment Simulator ---
+
+--- Processing Request for user123 ---
+Context: Industry: Manufacturing, Annual Emissions: 1440t.
+[TOOL] Simulating Investment for: solar panels
+Response: Investing in solar panels is definitely worth considering! Based on our simulations, an investment in solar panels with an estimated cost of RM50,000 could result in tax savings of RM12,000, bringing your net cost down to RM38,000. Even better, you could see a full payback on your investment in just 2.5 years.
+
+This looks like a strong financial case for reducing your carbon footprint. Would you like to explore other green investment options or perhaps see how a different tax rate might impact your liabilities?
+
+--- TEST 5: Industry Benchmark ---
+
+--- Processing Request for user123 ---
+Context: Industry: Manufacturing, Annual Emissions: 1440t.
+[TOOL] Benchmarking User: user123
+Response: Your carbon intensity is 0.144 tonnes CO2e per RM of revenue, which is 71900% higher than the industry average of 0.0002 tonnes CO2e per RM. This indicates a significant opportunity for improvement in your carbon footprint.
+
+Would you like to explore options to reduce your emissions and minimize carbon tax liability?
