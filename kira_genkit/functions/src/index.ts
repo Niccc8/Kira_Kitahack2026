@@ -69,9 +69,9 @@ const CarbonEntrySchema = ai.defineSchema(
 
 // define flow for extractInvoice()
 // output an array on item since a single  invoice can have multiple items
-export const extractInvoice = ai.defineFlow(
+export const extractInvoiceFlow = ai.defineFlow(
     {
-        name: 'extractInvoice', 
+        name: 'extractInvoiceFlow', 
         inputSchema: z.object({
             file: z.string().describe("URL or local path to the invoice file"),
         }),
@@ -106,17 +106,17 @@ export const extractInvoice = ai.defineFlow(
         return output;
     }
 );
-export const processExtractInvoice = onCallGenkit(
+export const extractInvoice = onCallGenkit(
     {
         secrets: [googleAIapiKey],
     },
-    extractInvoice
+    extractInvoiceFlow
 );
 
 // define flow for categoriseItems()
-export const categoriseItems = ai.defineFlow(
+export const categoriseItemsFlow = ai.defineFlow(
     {
-        name: 'categoriseItems', 
+        name: 'categoriseItemsFlow', 
         inputSchema: InvoiceResponseSchema,
         outputSchema: z.object({
             gitaEntries: z.array(GITAEntrySchema),
@@ -132,14 +132,14 @@ export const categoriseItems = ai.defineFlow(
         for (const item of input.items){
             // all ItemSchema are CarbonEntrySchema
             const carbonEntry = await ai.run(`carbon-${item.name}`, async () => {
-                return await convertToCarbonEntry(item);
+                return await convertToCarbonEntryFlow(item);
             });
             carbonEntries.push(carbonEntry);
 
             // only ItemSchema with isGitaEligible are GITAEntrySchema
             if (item.isGitaEligible) {
                 const gitaEntry = await ai.run(`gita-${item.name}`, async () => {
-                    return await convertToGitaEntry(item);
+                    return await convertToGitaEntryFlow(item);
                 });
                 gitaEntries.push(gitaEntry);
             }
@@ -153,17 +153,17 @@ export const categoriseItems = ai.defineFlow(
         return { gitaEntries, carbonEntries };
     }
 );
-export const processCategoriseItem = onCallGenkit(
+export const categoriseItem = onCallGenkit(
     {
         secrets: [googleAIapiKey],
     },
-    categoriseItems
+    categoriseItemsFlow
 );
 
-// define flow for convertToCarbonEntry()
-export const convertToCarbonEntry = ai.defineFlow(
+// define flow for convertToCarbonEntryFlow()
+export const convertToCarbonEntryFlow = ai.defineFlow(
     {
-        name: 'convertToCarbonEntry', 
+        name: 'convertToCarbonEntryFlow', 
         inputSchema: ItemSchema,
         outputSchema: CarbonEntrySchema, 
     },
@@ -201,10 +201,10 @@ export const convertToCarbonEntry = ai.defineFlow(
     }
 );
 
-// define flow for convertToGitaEntry()
-export const convertToGitaEntry = ai.defineFlow(
+// define flow for convertToGitaEntryFlow()
+export const convertToGitaEntryFlow = ai.defineFlow(
     {
-        name: 'convertToGitaEntry', 
+        name: 'convertToGitaEntryFlow', 
         inputSchema: ItemSchema,
         outputSchema: GITAEntrySchema,
     },
