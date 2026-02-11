@@ -5,7 +5,7 @@ import '../models/receipt.dart';
 
 class GenkitService {
   // TODO: Replace with your teammate's Genkit API URL
-  static const String baseUrl = 'YOUR_GENKIT_API_URL_HERE';
+  static const String baseUrl = 'https://us-central1-kira26.cloudfunctions.net';
   
   /// Process receipt image with Genkit API
   /// 
@@ -22,7 +22,7 @@ class GenkitService {
       print('   User ID: $userId');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/processReceipt'),
+        Uri.parse('$baseUrl/processReceiptHttp'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -40,11 +40,25 @@ class GenkitService {
       if (response.statusCode == 200) {
         print('✅ Genkit API success');
         final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final receipt = Receipt.fromFirestore(json);
-        print('   Receipt ID: ${receipt.id}');
-        print('   Vendor: ${receipt.vendor}');
-        print('   CO2: ${receipt.co2Kg} kg');
-        return receipt;
+        
+        // Debug: Print the JSON structure
+        print('   Response keys: ${json.keys.toList()}');
+        print('   Has id: ${json.containsKey('id')}, value: ${json['id']}');
+        print('   Has vendor: ${json.containsKey('vendor')}, value: ${json['vendor']}');
+        print('   Has lineItems: ${json.containsKey('lineItems')}, count: ${(json['lineItems'] as List?)?.length ?? 0}');
+        
+        try {
+          final receipt = Receipt.fromFirestore(json);
+          print('   Receipt ID: ${receipt.id}');
+          print('   Vendor: ${receipt.vendor}');
+          print('   CO2: ${receipt.co2Kg} kg');
+          return receipt;
+        } catch (e, stackTrace) {
+          print('❌ Error parsing receipt: $e');
+          print('   Stack trace: $stackTrace');
+          print('   JSON data: $json');
+          rethrow;
+        }
       } else {
         print('❌ Genkit API error: ${response.statusCode}');
         print('   Response: ${response.body}');

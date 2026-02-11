@@ -1,17 +1,21 @@
 /// Receipt Repository
 /// 
-/// Manages receipt storage using in-memory storage (works on all platforms).
+/// NOTE: This repository is deprecated. Receipts are now managed through:
+/// - GenkitService for processing (saves directly to Firestore)
+/// - Firestore streams via receipt_providers.dart for reading
+/// 
+/// This file is kept for backwards compatibility but is no longer actively used.
 library;
 
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 import '../models/receipt.dart';
-import '../services/gemini_service.dart';
 
 /// Repository for managing receipts (in-memory)
+/// 
+/// DEPRECATED: Use GenkitService and Firestore providers instead
 class ReceiptRepository {
-  final GeminiService _geminiService = GeminiService();
   final List<Receipt> _receipts = [];
   bool _initialized = false;
   
@@ -21,46 +25,25 @@ class ReceiptRepository {
   }
   
   /// Process image and save receipt (from file path - mobile/desktop)
+  /// 
+  /// DEPRECATED: Use GenkitService.processReceipt() instead
+  @Deprecated('Use GenkitService.processReceipt() instead')
   Future<Receipt> processReceipt(String imagePath) async {
-    print('📥 Repository: Processing receipt from $imagePath');
-    
-    // Read image bytes
-    final file = File(imagePath);
-    final imageBytes = await file.readAsBytes();
-    
-    return _processReceiptInternal(imageBytes, imagePath);
+    throw UnimplementedError(
+      'ReceiptRepository.processReceipt is deprecated. '
+      'Use GenkitService.processReceipt() instead, which saves directly to Firestore.'
+    );
   }
   
   /// Process image and save receipt (from bytes - web compatible)
+  /// 
+  /// DEPRECATED: Use GenkitService.processReceipt() instead
+  @Deprecated('Use GenkitService.processReceipt() instead')
   Future<Receipt> processReceiptFromBytes(List<int> imageBytes, String imagePath) async {
-    print('📥 Repository: Processing receipt from bytes (${imageBytes.length} bytes)');
-    return _processReceiptInternal(imageBytes, imagePath);
-  }
-  
-  /// Internal method to process receipt from bytes
-  Future<Receipt> _processReceiptInternal(List<int> imageBytes, String imagePath) async {
-    print('📥 Repository: Calling Gemini service with ${imageBytes.length} bytes');
-    
-    // Extract data using Gemini
-    final extractedData = await _geminiService.extractReceiptData(Uint8List.fromList(imageBytes));
-    
-    // Create receipt
-    final receipt = Receipt.fromExtraction(
-      id: const Uuid().v4(),
-      json: extractedData,
-      imagePath: imagePath,
+    throw UnimplementedError(
+      'ReceiptRepository.processReceiptFromBytes is deprecated. '
+      'Use GenkitService.processReceipt() instead, which saves directly to Firestore.'
     );
-    
-    print('📥 Repository: Created receipt: ${receipt.id}');
-    print('   Vendor: ${receipt.vendor}');
-    print('   Category: ${receipt.category}');
-    print('   CO2: ${receipt.co2Kg} kg');
-    
-    // Save to memory
-    _receipts.insert(0, receipt); // Add to beginning
-    print('📥 Repository: Saved! Total receipts: ${_receipts.length}');
-    
-    return receipt;
   }
   
   /// Get all receipts

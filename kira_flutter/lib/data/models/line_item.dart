@@ -38,14 +38,14 @@ class LineItem {
   // From Firestore
   factory LineItem.fromJson(Map<String, dynamic> json) {
     return LineItem(
-      name: json['name'] as String,
-      category: json['category'] as String,
-      quantity: (json['quantity'] as num).toDouble(),
-      unit: json['unit'] as String,
-      price: (json['price'] as num).toDouble(),
-      co2Kg: (json['co2Kg'] as num).toDouble(),
-      scope: json['scope'] as int,
-      gitaEligible: json['gitaEligible'] as bool,
+      name: json['name'] as String? ?? 'Unknown Item',
+      category: json['category'] as String? ?? 'other',
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 1.0,
+      unit: json['unit'] as String? ?? 'pcs',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      co2Kg: (json['co2Kg'] as num?)?.toDouble() ?? 0.0,
+      scope: json['scope'] as int? ?? 3,
+      gitaEligible: json['gitaEligible'] as bool? ?? false,
       gitaTier: json['gitaTier'] as int?,
       gitaCategory: json['gitaCategory'] as String?,
       gitaAllowance: (json['gitaAllowance'] as num?)?.toDouble(),

@@ -119,15 +119,36 @@ class Receipt {
   factory Receipt.fromFirestore(Map<String, dynamic> json) {
     final lineItemsJson = json['lineItems'] as List<dynamic>? ?? [];
     
+    // Safely parse date strings
+    DateTime parseDate(dynamic dateValue) {
+      if (dateValue == null) return DateTime.now();
+      try {
+        if (dateValue is String) {
+          return DateTime.parse(dateValue);
+        }
+        return DateTime.now();
+      } catch (e) {
+        return DateTime.now();
+      }
+    }
+    
     return Receipt(
-      id: json['id'] as String,
-      vendor: json['vendor'] as String,
-      date: DateTime.parse(json['date'] as String),
-      total: (json['total'] as num).toDouble(),
+      id: (json['id'] as String?)?.toString() ?? '',
+      vendor: (json['vendor'] as String?)?.toString() ?? 'Unknown Vendor',
+      date: parseDate(json['date']),
+      total: (json['total'] as num?)?.toDouble() ?? 0.0,
       imageUrl: json['imageUrl'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: parseDate(json['createdAt']),
       lineItems: lineItemsJson
-          .map((item) => LineItem.fromJson(item as Map<String, dynamic>))
+          .map((item) {
+            try {
+              return LineItem.fromJson(item as Map<String, dynamic>);
+            } catch (e) {
+              print('Error parsing line item: $e');
+              return null;
+            }
+          })
+          .whereType<LineItem>()
           .toList(),
     );
   }

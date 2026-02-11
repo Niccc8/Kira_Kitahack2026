@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import '../../../data/models/receipt.dart';
 import '../../../data/models/line_item.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/typography.dart';
 import '../../../core/constants/spacing.dart';
+import '../../../providers/auth_providers.dart';
 import 'package:intl/intl.dart';
 
 enum ReceiptDetailMode {
@@ -26,6 +28,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dateFormat = DateFormat('MMM dd, yyyy');
+    final userId = ref.watch(userIdProvider);
     
     return Scaffold(
       backgroundColor: KiraColors.background,
@@ -43,10 +46,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Receipt Image/PDF
-            if (receipt.imageUrl != null)
-              _buildImageViewer()
-            else
-              _buildNoImagePlaceholder(),
+            _buildReceiptMedia(userId),
             
             // Receipt Details
             Padding(
@@ -139,7 +139,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
               
               // Tax Savings - Big Number
               Text(
-                'RM ${receipt.gitaAllowance?.toStringAsFixed(2) ?? "0"}',
+                'RM ${receipt.gitaAllowance.toStringAsFixed(2)}',
                 style: KiraTypography.h1.copyWith(
                   color: Colors.white,
                   fontSize: 36,
@@ -167,7 +167,9 @@ class ReceiptDetailScreen extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Tier ${receipt.gitaTier} • ${receipt.gitaCategory}',
+                  receipt.gitaTier != null && receipt.gitaCategory != null
+                      ? 'Tier ${receipt.gitaTier} • ${receipt.gitaCategory}'
+                      : 'GITA Eligible',
                   style: KiraTypography.body2.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -342,8 +344,8 @@ class ReceiptDetailScreen extends ConsumerWidget {
         const SizedBox(height: KiraSpacing.md),
         
         _buildInfoCard(
-          'Quantity',
-          '${receipt.quantity.toStringAsFixed(0)} ${receipt.unit}',
+          'Line Items',
+          '${receipt.lineItems.length} item${receipt.lineItems.length != 1 ? 's' : ''}',
           Icons.inventory,
         ),
         
@@ -437,7 +439,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        'RM ${receipt.gitaAllowance?.toStringAsFixed(2)} tax allowance',
+                        'RM ${receipt.gitaAllowance.toStringAsFixed(2)} tax allowance',
                         style: KiraTypography.caption.copyWith(
                           color: KiraColors.text700,
                         ),
@@ -445,7 +447,7 @@ class ReceiptDetailScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const Icon(
+                Icon(
                   Icons.arrow_forward_ios,
                   size: 16,
                   color: KiraColors.text400,
@@ -458,8 +460,45 @@ class ReceiptDetailScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildImageViewer() {
-    final url = receipt.imageUrl!;
+  Widget _buildReceiptMedia(String? userId) {
+    // 1) Prefer URL stored on the receipt (signed URL, etc.)
+    if (receipt.imageUrl != null && receipt.imageUrl!.trim().isNotEmpty) {
+      return _buildMediaFromUrl(receipt.imageUrl!);
+    }
+
+    // 2) Otherwise, try to resolve from Firebase Storage using deterministic path
+    if (userId == null || userId.trim().isEmpty) {
+      return _buildNoImagePlaceholder();
+    }
+
+    final storagePath = 'users/$userId/receipts/${receipt.id}.jpg';
+    final futureUrl = FirebaseStorage.instance.ref(storagePath).getDownloadURL();
+
+    return FutureBuilder<String>(
+      future: futureUrl,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            width: double.infinity,
+            height: 200,
+            color: KiraColors.surface,
+            child: const Center(
+              child: CircularProgressIndicator(color: KiraColors.primary500),
+            ),
+          );
+        }
+
+        final url = snapshot.data;
+        if (snapshot.hasError || url == null || url.trim().isEmpty) {
+          return _buildNoImagePlaceholder();
+        }
+
+        return _buildMediaFromUrl(url);
+      },
+    );
+  }
+
+  Widget _buildMediaFromUrl(String url) {
     final isPdf = url.toLowerCase().endsWith('.pdf');
     
     if (isPdf) {
@@ -561,7 +600,6 @@ class ReceiptDetailScreen extends ConsumerWidget {
         ),
       );
     }
-  }
   }
 
   Widget _buildNoImagePlaceholder() {

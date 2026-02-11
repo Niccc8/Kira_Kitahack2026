@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
@@ -14,7 +15,9 @@ import '../../../shared/widgets/kira_card.dart';
 import '../../../shared/widgets/kira_button.dart';
 import '../../../shared/widgets/kira_badge.dart';
 import '../../../providers/receipt_providers.dart';
+import '../../../providers/auth_providers.dart';
 import '../../../data/models/receipt.dart';
+import '../../receipts/presentation/receipt_detail_screen.dart';
 
 /// Scan screen implementation
 class ScanScreen extends ConsumerStatefulWidget {
@@ -313,9 +316,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('RECENT UPLOADS', style: KiraTypography.sectionTitle),
+        Text('YOUR RECEIPTS', style: KiraTypography.sectionTitle),
         const SizedBox(height: 12),
-        ...receipts.take(10).map((receipt) => _buildUploadItem(receipt)),
+        ...receipts.map((receipt) => _buildUploadItem(receipt)),
       ],
     );
   }
@@ -325,56 +328,150 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
     final co2Kg = receipt.co2Kg;
     final vendor = receipt.vendor;
     final category = receipt.category;
+    final userId = ref.watch(userIdProvider);
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: KiraCard(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // Icon based on category
+        child: InkWell(
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ReceiptDetailScreen(receipt: receipt),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              _buildReceiptThumb(userId, receipt, category: category, scope: scope),
+              const SizedBox(width: 12),
+              
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(vendor, style: KiraTypography.bodyMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Scope $scope • $category',
+                      style: KiraTypography.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // CO2
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  KiraBadge.success(
+                    label: 'Done',
+                    icon: Icons.check_circle,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${co2Kg.toStringAsFixed(1)} kg',
+                    style: KiraTypography.labelSmall.copyWith(
+                      color: KiraColors.textAccent,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReceiptThumb(String? userId, Receipt receipt, {required String category, required int scope}) {
+    Widget frame(Widget child) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+            borderRadius: BorderRadius.circular(10),
+            color: Colors.white.withValues(alpha: 0.03),
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    final url = receipt.imageUrl;
+    if (url != null && url.trim().isNotEmpty) {
+      return frame(
+        Image.network(
+          url,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => Icon(
+            _getCategoryIcon(category),
+            size: 20,
+            color: _getScopeColor(scope),
+          ),
+        ),
+      );
+    }
+
+    if (userId == null || userId.trim().isEmpty) {
+      return frame(
+        Icon(
+          _getCategoryIcon(category),
+          size: 20,
+          color: _getScopeColor(scope),
+        ),
+      );
+    }
+
+    final path = 'users/$userId/receipts/${receipt.id}.jpg';
+    final futureUrl = FirebaseStorage.instance.ref(path).getDownloadURL();
+
+    return FutureBuilder<String>(
+      future: futureUrl,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return frame(
+            const Center(
+              child: SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: KiraColors.primary500,
+                ),
+              ),
+            ),
+          );
+        }
+
+        final resolved = snapshot.data;
+        if (snapshot.hasError || resolved == null || resolved.trim().isEmpty) {
+          return frame(
             Icon(
               _getCategoryIcon(category),
               size: 20,
               color: _getScopeColor(scope),
             ),
-            const SizedBox(width: 12),
-            
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(vendor, style: KiraTypography.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Scope $scope • $category',
-                    style: KiraTypography.labelSmall,
-                  ),
-                ],
-              ),
+          );
+        }
+
+        return frame(
+          Image.network(
+            resolved,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Icon(
+              _getCategoryIcon(category),
+              size: 20,
+              color: _getScopeColor(scope),
             ),
-            
-            // CO2
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                KiraBadge.success(
-                  label: 'Done',
-                  icon: Icons.check_circle,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${co2Kg.toStringAsFixed(1)} kg',
-                  style: KiraTypography.labelSmall.copyWith(
-                    color: KiraColors.textAccent,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
   
