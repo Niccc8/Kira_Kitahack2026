@@ -64,6 +64,10 @@ node_modules/
 
 # dotenv environment variables file
 .env
+.secret.local
 
 # dataconnect generated files
 .dataconnect
+
+# test Firebase
+service-account.json
