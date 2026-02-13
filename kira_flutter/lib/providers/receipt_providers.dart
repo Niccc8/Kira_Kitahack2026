@@ -7,7 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/models/receipt.dart';
 import '../data/services/genkit_service.dart';
+import '../data/services/storage_service.dart';
 import 'auth_providers.dart';
+
+// ═══════════════════════════════════════════════════════
+// SERVICES
+// ═══════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════
 // SERVICES
@@ -17,13 +22,73 @@ final genkitServiceProvider = Provider<GenkitService>((ref) {
   return GenkitService();
 });
 
+final storageServiceProvider = Provider<StorageService>((ref) {
+  return StorageService();
+});
+
 final firestoreProvider = Provider<FirebaseFirestore>((ref) {
   return FirebaseFirestore.instance;
 });
 
+// ... [Stream providers remain unchanged] ...
+
 // ═══════════════════════════════════════════════════════
-// RECEIPT STREAM (Real-time from Firestore)
+// RECEIPT UPLOAD
 // ═══════════════════════════════════════════════════════
+
+/// Receipt upload state notifier
+class ReceiptUploadNotifier extends StateNotifier<AsyncValue<void>> {
+  final GenkitService _genkit;
+  final StorageService _storage;
+  final String? _userId;
+  
+  ReceiptUploadNotifier(this._genkit, this._storage, this._userId) : super(const AsyncValue.data(null));
+  
+  /// Upload receipt from bytes
+  Future<void> uploadReceipt(Uint8List imageBytes) async {
+    if (_userId == null) {
+      state = AsyncValue.error('Not authenticated', StackTrace.current);
+      return;
+    }
+    
+    state = const AsyncValue.loading();
+    
+    try {
+      print('📤 Starting upload flow...');
+      
+      // 1. Upload to Firebase Storage
+      final imageUrl = await _storage.uploadReceiptImage(imageBytes, _userId!);
+      
+      // 2. Process with Genkit (passing imageUrl)
+      // Genkit processes and saves to Firestore automatically
+      final receipt = await _genkit.processReceiptHttp(imageBytes, _userId!);
+      
+      print('✅ Receipt processed & saved: ${receipt.id}');
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      print('❌ Upload failed: $e');
+      state = AsyncValue.error(e, st);
+    }
+  }
+  
+  /// Alias for uploadReceipt (backwards compatibility)
+  Future<void> uploadReceiptBytes(Uint8List imageBytes, String path) async {
+    await uploadReceipt(imageBytes);
+  }
+  
+  /// Reset state
+  void reset() {
+    state = const AsyncValue.data(null);
+  }
+}
+
+final receiptUploadProvider = StateNotifierProvider<ReceiptUploadNotifier, AsyncValue<void>>((ref) {
+  final genkit = ref.watch(genkitServiceProvider);
+  final storage = ref.watch(storageServiceProvider);
+  final userId = ref.watch(userIdProvider);
+  
+  return ReceiptUploadNotifier(genkit, storage, userId);
+});// ═══════════════════════════════════════════════════════
 
 /// Real-time stream of all receipts for current user
 final receiptsStreamProvider = StreamProvider<List<Receipt>>((ref) {
@@ -115,54 +180,3 @@ final gitaReceiptsByTierProvider = Provider.family<List<Receipt>, int>((ref, tie
   return gitaReceipts.where((r) => r.gitaTier == tier).toList();
 });
 
-// ═══════════════════════════════════════════════════════
-// RECEIPT UPLOAD
-// ═══════════════════════════════════════════════════════
-
-/// Receipt upload state notifier
-class ReceiptUploadNotifier extends StateNotifier<AsyncValue<void>> {
-  final GenkitService _genkit;
-  final String? _userId;
-  
-  ReceiptUploadNotifier(this._genkit, this._userId) : super(const AsyncValue.data(null));
-  
-  /// Upload receipt from bytes
-  Future<void> uploadReceipt(Uint8List imageBytes) async {
-    if (_userId == null) {
-      state = AsyncValue.error('Not authenticated', StackTrace.current);
-      return;
-    }
-    
-    state = const AsyncValue.loading();
-    
-    try {
-      print('📤 Uploading receipt...');
-      
-      // Genkit processes and saves to Firestore automatically
-      final receipt = await _genkit.processReceipt(imageBytes, _userId!);
-      
-      print('✅ Receipt uploaded: ${receipt.id}');
-      state = const AsyncValue.data(null);
-    } catch (e, st) {
-      print('❌ Upload failed: $e');
-      state = AsyncValue.error(e, st);
-    }
-  }
-  
-  /// Alias for uploadReceipt (backwards compatibility)
-  Future<void> uploadReceiptBytes(Uint8List imageBytes, String path) async {
-    await uploadReceipt(imageBytes);
-  }
-  
-  /// Reset state
-  void reset() {
-    state = const AsyncValue.data(null);
-  }
-}
-
-final receiptUploadProvider = StateNotifierProvider<ReceiptUploadNotifier, AsyncValue<void>>((ref) {
-  final genkit = ref.watch(genkitServiceProvider);
-  final userId = ref.watch(userIdProvider);
-  
-  return ReceiptUploadNotifier(genkit, userId);
-});

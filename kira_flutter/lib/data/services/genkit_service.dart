@@ -15,7 +15,7 @@ class GenkitService {
   /// 3. Determine GITA eligibility
   /// 4. Save to Firebase Firestore
   /// 5. Return complete receipt JSON
-  Future<Receipt> processReceipt(Uint8List imageBytes, String userId) async {
+  Future<Receipt> processReceiptHttp(Uint8List imageBytes, String userId) async {
     try {
       print('📤 Sending receipt to Genkit API...');
       print('   Image size: ${imageBytes.length} bytes');
@@ -31,7 +31,7 @@ class GenkitService {
           'imageBytes': base64Encode(imageBytes),
         }),
       ).timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 180), // Longer timeout for AI processing
         onTimeout: () {
           throw Exception('Genkit API request timed out');
         },
@@ -43,9 +43,6 @@ class GenkitService {
         
         // Debug: Print the JSON structure
         print('   Response keys: ${json.keys.toList()}');
-        print('   Has id: ${json.containsKey('id')}, value: ${json['id']}');
-        print('   Has vendor: ${json.containsKey('vendor')}, value: ${json['vendor']}');
-        print('   Has lineItems: ${json.containsKey('lineItems')}, count: ${(json['lineItems'] as List?)?.length ?? 0}');
         
         try {
           final receipt = Receipt.fromFirestore(json);

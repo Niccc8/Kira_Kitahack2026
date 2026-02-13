@@ -41,7 +41,7 @@ class MockDataService {
         vendor: 'Tenaga Nasional Berhad (TNB)',
         date: DateTime(now.year, now.month - 1, 15),
         total: 850.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/tnb/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -64,7 +64,7 @@ class MockDataService {
         vendor: 'Petronas Station',
         date: DateTime(now.year, now.month - 1, 20),
         total: 320.50,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/fuel/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -87,7 +87,7 @@ class MockDataService {
         vendor: 'AirAsia',
         date: DateTime(now.year, now.month - 2, 10),
         total: 450.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/flight/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -110,7 +110,7 @@ class MockDataService {
         vendor: 'Green Energy Solutions Sdn Bhd',
         date: DateTime(now.year, now.month - 2, 5),
         total: 15500.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/solar/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -122,6 +122,8 @@ class MockDataService {
             scope: 2,
             category: 'utilities',
             gitaEligible: true,
+            gitaTier: 1,
+            gitaCategory: 'Solar PV System',
             gitaAllowance: 3100.00, // 20% GITA allowance
           ),
         ],
@@ -133,7 +135,7 @@ class MockDataService {
         vendor: 'Office Depot',
         date: DateTime(now.year, now.month, 3),
         total: 280.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/office/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -167,7 +169,7 @@ class MockDataService {
         vendor: 'Gas Malaysia',
         date: DateTime(now.year, now.month - 3, 28),
         total: 680.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/gas/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -190,7 +192,7 @@ class MockDataService {
         vendor: 'Alam Flora Waste Management',
         date: DateTime(now.year, now.month - 4, 12),
         total: 420.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/waste/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -213,7 +215,7 @@ class MockDataService {
         vendor: 'ChargEV',
         date: DateTime(now.year, now.month, 8),
         total: 45.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/ev/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -225,6 +227,8 @@ class MockDataService {
             scope: 2,
             category: 'transport',
             gitaEligible: true,
+            gitaTier: 2,
+            gitaCategory: 'Electric Vehicle',
             gitaAllowance: 9.00, // Small GITA benefit
           ),
         ],
@@ -236,7 +240,7 @@ class MockDataService {
         vendor: 'Industrial Supplies Co',
         date: DateTime(now.year, now.month - 5, 22),
         total: 3200.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/materials/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -270,7 +274,7 @@ class MockDataService {
         vendor: 'Air Selangor',
         date: DateTime(now.year, now.month - 1, 5),
         total: 125.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/water/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -293,7 +297,7 @@ class MockDataService {
         vendor: 'EcoLite Solutions',
         date: DateTime(now.year, now.month - 3, 18),
         total: 2800.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/led/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -305,6 +309,8 @@ class MockDataService {
             scope: 2,
             category: 'utilities',
             gitaEligible: true,
+            gitaTier: 2,
+            gitaCategory: 'Energy Efficiency',
             gitaAllowance: 560.00, // 20% GITA
           ),
         ],
@@ -316,7 +322,7 @@ class MockDataService {
         vendor: 'Shell Station',
         date: DateTime(now.year, now.month, 12),
         total: 95.00,
-        imageUrl: null,
+        imageUrl: 'https://picsum.photos/seed/shell/400/600',
         createdAt: now,
         lineItems: [
           LineItem(
@@ -329,6 +335,44 @@ class MockDataService {
             category: 'transport',
             gitaEligible: false,
             gitaAllowance: 0,
+          ),
+        ],
+      ),
+      
+      // 13. [NEW] Green Supplies Multi-Item - Scope 3 & GITA
+      Receipt(
+        id: 'mock_${DateTime.now().millisecondsSinceEpoch}_13',
+        vendor: 'Sustainable Packaging Sdn Bhd',
+        date: DateTime(now.year, now.month, 2),
+        total: 2450.00,
+        imageUrl: 'https://picsum.photos/seed/packaging/400/600',
+        createdAt: now,
+        lineItems: [
+          LineItem(
+            name: 'Recycled Cardboard Boxes',
+            quantity: 2000.0,
+            unit: 'units',
+            price: 0.85,
+            co2Kg: 120.0,
+            scope: 3,
+            category: 'materials',
+            gitaEligible: true, // Example GITA eligibility
+            gitaTier: 2,
+            gitaCategory: 'Green Packaging',
+            gitaAllowance: 340.00,
+          ),
+          LineItem(
+            name: 'Biodegradable Packing Peanuts',
+            quantity: 50.0,
+            unit: 'kg',
+            price: 15.00,
+            co2Kg: 15.0,
+            scope: 3,
+            category: 'materials',
+            gitaEligible: true,
+            gitaTier: 2,
+            gitaCategory: 'Green Packaging',
+            gitaAllowance: 150.00,
           ),
         ],
       ),

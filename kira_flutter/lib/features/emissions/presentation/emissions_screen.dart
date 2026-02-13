@@ -9,6 +9,7 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
 import '../../../shared/widgets/kira_card.dart';
+import '../../../shared/widgets/item_detail_modal.dart';
 import '../../../shared/widgets/period_selector.dart';
 import '../../../providers/receipt_providers.dart';
 import '../../../data/models/receipt.dart';
@@ -276,39 +277,53 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
     
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: KiraCard(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // Icon
-            Icon(icon, size: 20, color: scopeColor),
-            const SizedBox(width: 12),
-            
-            // Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(receipt.vendor, style: KiraTypography.bodyMedium),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${receipt.lineItems.length} item${receipt.lineItems.length != 1 ? 's' : ''}',
-                    style: KiraTypography.labelSmall,
-                  ),
-                ],
-              ),
+      child: InkWell(
+        onTap: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => ItemDetailModal(
+              receipt: receipt,
+              type: DetailType.emission,
             ),
-            
-            // Carbon value
-            Text(
-              '${(receipt.co2Kg).toStringAsFixed(0)} kg',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                color: scopeColor,
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: KiraCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              // Icon
+              Icon(icon, size: 20, color: scopeColor),
+              const SizedBox(width: 12),
+              
+              // Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(receipt.vendor, style: KiraTypography.bodyMedium),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${receipt.lineItems.length} item${receipt.lineItems.length != 1 ? 's' : ''}',
+                      style: KiraTypography.labelSmall,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              
+              // Carbon value
+              Text(
+                '${(receipt.co2Kg).toStringAsFixed(0)} kg',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: scopeColor,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

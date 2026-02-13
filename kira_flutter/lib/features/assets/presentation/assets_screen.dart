@@ -12,7 +12,10 @@ import '../../../core/constants/typography.dart';
 import '../../../shared/widgets/kira_card.dart';
 import '../../../shared/widgets/kira_badge.dart';
 import '../../../shared/widgets/period_selector.dart';
+import '../../../shared/widgets/item_detail_modal.dart';
 import '../../../providers/receipt_providers.dart';
+import '../../../data/models/receipt.dart';
+import '../../../data/models/line_item.dart';
 
 /// Assets screen implementation
 class AssetsScreen extends ConsumerStatefulWidget {
@@ -143,7 +146,18 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     );
   }
   
-  Widget _buildGitaAssetsList(List receipts) {
+  Widget _buildGitaAssetsList(List<Receipt> receipts) {
+    // 1. Flatten into (LineItem, Receipt) pairs
+    final List<({LineItem item, Receipt receipt})> gitaItems = [];
+    
+    for (var receipt in receipts) {
+      for (var item in receipt.lineItems) {
+        if (item.gitaEligible) {
+          gitaItems.add((item: item, receipt: receipt));
+        }
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -152,58 +166,152 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
           style: KiraTypography.h4,
         ),
         const SizedBox(height: 12),
-        ...receipts.map((receipt) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: KiraCard(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                // Icon
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: KiraColors.success.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+        ...gitaItems.map((entry) {
+          final item = entry.item;
+          final receipt = entry.receipt;
+          final allowance = item.gitaAllowance ?? 0.0;
+          
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: InkWell(
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => ItemDetailModal(
+                    receipt: receipt, 
+                    type: DetailType.gita,
+                    focusedItem: item,
                   ),
-                  child: const Icon(
-                    Icons.eco,
-                    color: KiraColors.success,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        receipt.vendor,
-                        style: KiraTypography.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w600,
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: KiraCard(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Column(
+                  children: [
+                    // Top Row: Icon, Title, Badge
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Icon
+                        Icon(
+                          _getCategoryIcon(item.gitaCategory ?? 'utilities'),
+                          color: KiraColors.primary400, // Light green icon
+                          size: 24,
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'RM ${receipt.gitaAllowance.toStringAsFixed(2)} tax savings',
-                        style: KiraTypography.bodySmall.copyWith(
-                          color: KiraColors.success,
+                        const SizedBox(width: 12),
+                        
+                        // Title & Vendor
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.name,
+                                style: KiraTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                receipt.vendor,
+                                style: KiraTypography.bodySmall.copyWith(
+                                  color: KiraColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                        
+                        // Badge
+                        KiraBadge.success(
+                           label: 'GITA',
+                           icon: Icons.verified,
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // Bottom Row: Cost & Saved (Darker inner box)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.2), // Darker inner box
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Cost
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Cost',
+                                style: KiraTypography.labelSmall.copyWith(color: KiraColors.textTertiary),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'RM ${_formatNumber(item.price.toInt())}',
+                                style: KiraTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          // Saved
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                'Saved',
+                                style: KiraTypography.labelSmall.copyWith(color: KiraColors.textTertiary),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'RM ${_formatNumber(allowance.toInt())}',
+                                style: KiraTypography.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: KiraColors.primary300, // Light green text for savings
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                // Badge
-                KiraBadge(
-                  label: 'GITA',
-                ),
-              ],
+              ),
             ),
-          ),
-        )),
+          );
+        }),
       ],
     );
+  }
+
+  // Helper for icons (duplicate of modal one, good to have here too)
+  IconData _getCategoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'utilities': return Icons.bolt;
+      case 'transport': return Icons.directions_car;
+      case 'materials': return Icons.factory;
+      case 'waste': return Icons.delete_outline;
+      case 'office': return Icons.business_center;
+      case 'travel': return Icons.flight;
+      case 'solar pv system': return Icons.wb_sunny_outlined;
+      case 'energy efficiency': return Icons.lightbulb_outline;
+      case 'electric vehicle': return Icons.electric_car;
+      case 'green packaging': return Icons.inventory_2_outlined; 
+      default: return Icons.receipt_long;
+    }
   }
   
   /// Info card about GITA
