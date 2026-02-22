@@ -25,243 +25,183 @@ const ai = genkit({
 // --- TOOLS DEFINITION ---
 
 // --- TOOL 1: SEARCH MYHIJAU ---
+// Example1: where can I get solar panels
+// Example2: [attached invoice] provide a green alternative for this
 const searchMyHijauTool = ai.defineTool(
   {
     name: 'searchMyHijauDirectory',
-    description: 'Finds government-approved green assets. Use for queries about products/suppliers.',
+    description: 'Use this tool ONLY when the user asks for recommendations on green products, sustainable suppliers, alternatives to high-carbon items, or where to buy eco-friendly assets (e.g., solar panels, composters, EVs).',
     inputSchema: z.object({
-      query: z.string(),
+      query: z.string().describe("A single keyword to search the directory (e.g., 'solar', 'compost', 'packaging', 'led')"),
     }),
-    outputSchema: z.object({
-      results: z.array(z.any()),
-    }),
+    outputSchema: z.object({ results: z.array(z.any()) }),
   },
   async ({ query }) => {
     console.log(`[TOOL] Searching MyHijau for: ${query}`);
-    const snapshot = await db.collection('myhijau_assets')
+    const snapshot = await db.collection('myhijaudirectory')
       .where('keywords', 'array-contains', query.toLowerCase())
-      .limit(5)
-      .get();
+      .limit(5).get();
     return { results: snapshot.docs.map(d => d.data()) };
   }
 );
 
-  // SINGLE KEYWORD SEARCH
-  // const searchMyHijauTool = ai.defineTool(
-  //   {
-  //     name: 'searchMyHijauDirectory',
-  //     // CHANGE 1: We explicitly tell the AI to use single keywords
-  //     description: 'Finds green assets. Search by ONE keyword only (e.g. "solar", "chiller", "led").', 
-  //     inputSchema: z.object({
-  //       // CHANGE 2: Reinforce it in the schema description
-  //       query: z.string().describe('A single keyword to search for.'),
-  //     }),
-  //     outputSchema: z.object({
-  //       results: z.array(z.any()),
-  //     }),
-  //   },
-  //   async ({ query }) => {
-  //     // CHANGE 3: Simple cleanup to ensure lower case
-  //     const term = query.toLowerCase().trim();
-  //     console.log(`[TOOL] Searching MyHijau for keyword: "${term}"`);
-      
-  //     const snapshot = await db.collection('myhijau_assets')
-  //       .where('keywords', 'array-contains', term)
-  //       .limit(5)
-  //       .get();
-        
-  //     if (snapshot.empty) {
-  //         console.log("   -> No results found in DB.");
-  //     } else {
-  //         console.log(`   -> Found ${snapshot.size} results.`);
-  //     }
-
-  //     return { results: snapshot.docs.map(d => d.data()) };
-  //   }
-  // );
-
-  // --- TOOL 2: TAX SIMULATOR ---
+// --- TOOL 2: TAX SIMULATOR ---
+// Example1: how much do I need to pay for carbon tax
+// Example2: how much do I need to pay carbon tax if it is RM35/tonne
+// uses user.totalcarbonemissions --> default to 0 and accumulates each time a new invoice is added
 const taxSimulatorTool = ai.defineTool(
   {
     name: 'simulateTaxImpact',
-    description: 'Calculates carbon tax liability. Use when user asks about tax cost or savings.',
+    description: 'Use this tool ONLY when the user asks about how much carbon tax they will have to pay, their tax liability, or mentions a specific carbon tax rate (e.g., "RM 35 per tonne").',
     inputSchema: z.object({
       userId: z.string(),
-      proposedTaxRate: z.number(),
+      proposedTaxRate: z.number().describe("The tax rate per tonne in RM. If not specified by user, default to 30."),
     }),
-    outputSchema: z.object({
-      grossLiability: z.number(),
-      savings: z.number(),
-    }),
+    outputSchema: z.object({ grossLiability: z.number(), savings: z.number() }),
   },
   async ({ userId, proposedTaxRate }) => {
-    console.log(`[TOOL] Simulating Tax for User: ${userId} at Rate: ${proposedTaxRate}`);
+    console.log(`[TOOL] Simulating Tax for User: ${userId} at Rate: RM${proposedTaxRate}`);
     const userDoc = await db.collection('users').doc(userId).get();
     const data = userDoc.data() || {};
-    const gross = (data.totalEmissions || 0) * proposedTaxRate;
+    const gross = (data.totalcarbonemission || 0) * proposedTaxRate;
     const net = Math.max(0, gross - (data.gitaTaxCreditBalance || 0));
     return { grossLiability: gross, savings: gross - net };
   }
 );
 
 // --- TOOL 3: INVESTMENT SIMULATOR ---
-const investmentSimulatorTool = ai.defineTool(
+// Example: what is the payback period if I purchase solar panels?
+// Example: is it worth it to invest in solar panels?
+export const investmentSimulatorTool = ai.defineTool(
   {
     name: 'simulateInvestment',
-    description: 'Calculates ROI and payback period for green assets (Solar, LED, etc).',
+    description: 'Calculates ROI and payback period for a green asset investment or purchase',
     inputSchema: z.object({
-      assetType: z.string().describe('Type of asset (e.g. "solar", "led")'),
-      estimatedCost: z.number().optional().describe('Cost in RM (optional, AI can estimate if missing)'),
+      assetId: z.string().describe("The ID of the asset. Must be one of: 'solar_rooftop_10kwp', 'hvac_inverter_system', 'led_lighting_retrofit', 'battery_storage_20kwh', 'electric_delivery_van'"),
+      monthlyEnergyUsageKwh: z.number().describe("Estimated monthly energy usage in kWh. If unknown, default to 5000."),
     }),
     outputSchema: z.object({
-      estimatedCost: z.number(),
-      taxSavings: z.number(),
-      paybackYears: z.number(),
-      summary: z.string(),
+      paybackPeriodYears: z.number(),
+      annualSavingsRM: z.number(),
+      taxSavingsRM: z.number(),
+      lifetimeROI: z.number(),
     }),
   },
-  async ({ assetType, estimatedCost }) => {
-    console.log(`[TOOL] Simulating Investment for: ${assetType}`);
+  async ({ assetId, monthlyEnergyUsageKwh }) => {
+    console.log(`[TOOL] Simulating ROI for: ${assetId}`);
+    const assetDoc = await db.collection("greenAssets").doc(assetId).get();
+    if (!assetDoc.exists) throw new Error("Asset not found in ROI database.");
+
+    const asset = assetDoc.data();
+    const TNB_RATE = 0.50;
+    const TAX_RATE = 0.24;
+
+    // Calculate savings based on user's energy usage
+    const annualEnergyKwh = monthlyEnergyUsageKwh * 12;
+    const energyOffsetKwh = annualEnergyKwh * asset!.annualEnergyOffsetPercent;
+    const annualSavingsRM = (energyOffsetKwh * TNB_RATE) - asset!.annualMaintenanceRM;
     
-    // Mock Knowledge Base for MVP defaults
-    const defaults: Record<string, { cost: number, annualSavings: number }> = {
-      'solar': { cost: 50000, annualSavings: 15000 },
-      'led': { cost: 10000, annualSavings: 4000 },
-      'chiller': { cost: 150000, annualSavings: 45000 },
-    };
-
-    // Find closest match or default to solar
-    const key = Object.keys(defaults).find(k => assetType.toLowerCase().includes(k)) || 'solar';
-    const data = defaults[key];
-
-    const cost = estimatedCost || data.cost;
-    const annualSavings = data.annualSavings;
-
-    // GITA Logic: 24% Corporate Tax Rate * 100% Investment Allowance
-    const taxSavings = cost * 0.24; 
-    const netCost = cost - taxSavings;
-    const payback = netCost / annualSavings;
-
+    // GITA tax savings
+    const taxSavingsRM = asset!.gitaEligible ? asset!.capexRM * TAX_RATE : 0;
+    const effectiveCost = asset!.capexRM - taxSavingsRM;
+    const paybackPeriodYears = effectiveCost / annualSavingsRM;
+    const totalLifetimeSavings = annualSavingsRM * asset!.lifetimeYears;
+    const lifetimeROI = ((totalLifetimeSavings - effectiveCost) / effectiveCost) * 100;
+    
     return {
-      estimatedCost: cost,
-      taxSavings,
-      paybackYears: parseFloat(payback.toFixed(1)),
-      summary: `Asset: ${assetType}. Net Cost after Tax: RM${netCost}. Payback: ${payback.toFixed(1)} years.`
+      paybackPeriodYears: Number(paybackPeriodYears.toFixed(2)),
+      annualSavingsRM,
+      taxSavingsRM,
+      lifetimeROI: Number(lifetimeROI.toFixed(1)),
     };
   }
 );
 
 // --- TOOL 4: INDUSTRY BENCHMARK ---
+// Compares user carbon intensity vs industry average
+// Example: how does my carbon footprint compare to other manufacturers
+// retrieves all of the user.totalEmissions and find the average then compare the current user to the average and give a response
 const industryBenchmarkTool = ai.defineTool(
   {
     name: 'getIndustryBenchmark',
-    description: 'Compares user carbon intensity vs industry average.',
-    inputSchema: z.object({
-      userId: z.string(),
-    }),
-    outputSchema: z.object({
-      userIntensity: z.number(),
-      industryAverage: z.number(),
-      performance: z.string(),
-    }),
+    description: 'Use this tool ONLY when the user asks how they compare to competitors, what the industry average is, or if their carbon emissions are "good" or "bad" relative to others.',
+    inputSchema: z.object({ userId: z.string() }),
+    outputSchema: z.object({ userIntensity: z.number(), industryAverage: z.number(), performance: z.string() }),
   },
   async ({ userId }) => {
     console.log(`[TOOL] Benchmarking User: ${userId}`);
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
-    
-    if (!userData || !userData.industry) throw new Error("User industry not found");
+    if (!userData || !userData.industry) throw new Error("User data incomplete");
 
-    // Calculate Intensity: (Total Emissions in kg) / Revenue
-    // 1 Tonne = 1000 kg
-    const userIntensity = (userData.totalEmissions * 1000) / userData.annualRevenue;
-
-    // Fetch Industry Stat
+    const userIntensity = (userData.totalcarbonemission * 1000) / userData.annualRevenue;
     const statsDoc = await db.collection('industry_stats').doc(userData.industry).get();
-    const avgIntensity = statsDoc.exists ? statsDoc.data()?.averageIntensity : 0.0005;
+    const avgIntensity = statsDoc.exists ? statsDoc.data()?.averageIntensity : 0.0002;
 
-    // Compare
     const isGood = userIntensity < avgIntensity;
     const performance = isGood ? "Better (Lower Carbon)" : "Worse (Higher Carbon)";
     const percentDiff = ((Math.abs(userIntensity - avgIntensity) / avgIntensity) * 100).toFixed(0);
 
-    return {
-      userIntensity,
-      industryAverage: avgIntensity,
-      performance: `${percentDiff}% ${performance} than average.`
-    };
+    return { userIntensity, industryAverage: avgIntensity, performance: `${percentDiff}% ${performance} than industry average.` };
   }
 );
 
-// --- HELPER: Fetch Invoice Details ---
-async function getInvoiceContext(invoiceId: string | undefined): Promise<string> {
-  if (!invoiceId) return "";
-
+// --- HELPER: Fetch Receipt Details ---
+async function getReceiptContext(userId: string, receiptId: string | undefined): Promise<string> {
+  if (!receiptId) return "";
   try {
-    const doc = await db.collection('invoices').doc(invoiceId).get();
-    if (!doc.exists) return "\n[System] User selected an invoice, but ID was not found.";
+    // Corrected path: users/{userId}/receipts/{receiptId}
+    const doc = await db.collection('users').doc(userId).collection('receipts').doc(receiptId).get();
+    if (!doc.exists) return "\n[System] User selected a receipt, but ID was not found.";
     
     const data = doc.data();
-    // Format the invoice data for the LLM to read
     return `
-    \n=== SELECTED INVOICE CONTEXT ===
-    Invoice ID: ${invoiceId}
-    Vendor: ${data?.vendorName || "Unknown"}
+    \n=== SELECTED RECEIPT/INVOICE CONTEXT ===
+    Receipt ID: ${receiptId}
+    Vendor: ${data?.vendor || "Unknown"}
     Date: ${data?.date || "N/A"}
-    Items: ${JSON.stringify(data?.items || [])}
-    Total Emissions: ${data?.carbonFootprint || 0} kgCO2e
-    Fuel/Energy Type: ${data?.fuelType || "N/A"}
-    Usage Amount: ${data?.usageAmount || 0} ${data?.usageUnit || ""}
+    Line Items: ${JSON.stringify(data?.lineItems || [])}
     ================================
     `;
   } catch (error) {
-    console.error("Error fetching invoice:", error);
-    return "\n[System] Error retrieving invoice details.";
+    console.error("Error fetching receipt:", error);
+    return "\n[System] Error retrieving receipt details.";
   }
 }
 
 // --- THE AGENT FLOW ---
-
 const wiraBotFlow = ai.defineFlow(
   {
     name: 'wiraBot',
     inputSchema: z.object({ 
       userId: z.string(), 
       message: z.string(),
-      invoiceId: z.string().optional(), 
+      receiptId: z.string().optional(), 
     }),
     outputSchema: z.string(),
   },
-  async ({ userId, message, invoiceId}) => {
-    // Fetch user context
+  async ({ userId, message, receiptId}) => {
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
-    const userProfile = userData 
-      ? `Industry: ${userData.industry}, Annual Emissions: ${userData.totalEmissions}t.` 
-      : "Guest User";
+    const userProfile = userData ? `Industry: ${userData.industry}, Annual Revenue: RM${userData.annualRevenue}, Total Emissions: ${userData.totalcarbonemission}t.` : "Guest User";
     
-    // 2. Fetch Selected Invoice (if any)
-    const invoiceContext = await getInvoiceContext(invoiceId);
+    const receiptContext = await getReceiptContext(userId, receiptId);
     console.log(`\n--- Processing Request for ${userId} ---`);
-    console.log(`Invoice Context ${invoiceContext}`);
-    console.log(`User Context: ${userProfile}`);
 
     const { text } = await ai.generate({
       prompt: `
-        You are Wira, an AI Carbon Consultant.
+        You are Kira, an AI Carbon Consultant helping Malaysian SMEs.
         
         -- USER PROFILE --
         ${userProfile}
         
         -- ACTIVE CONTEXT --
-        ${invoiceContext ? `User is asking about this specific invoice:${invoiceContext}` : "No specific invoice selected."}
+        ${receiptContext ? `User has attached this specific receipt/invoice to the chat:${receiptContext}` : "No specific receipt attached."}
         
-        -- GOAL --
-        If an invoice is selected, analyze it specifically. 
-        - If they ask "how to reduce", look at the 'Items' or 'FuelType' in the invoice and suggest alternatives (use searchMyHijauDirectory if needed).
-        - If they ask "is this good", compare the emission intensity.
-        
-        User Query: ${message}
+        -- INSTRUCTIONS --
+        1. Answer the user's query: "${message}"
+        2. If a receipt is attached and the user asks how to reduce it, look at the 'Line Items' array. Extract keywords (like 'electricity', 'fuel', 'packaging') and use the searchMyHijauDirectory tool to find green alternatives.
+        3. Be conversational, professional, and helpful. Use RM for currency.
       `,
       tools: [searchMyHijauTool, taxSimulatorTool, investmentSimulatorTool, industryBenchmarkTool], 
     });
@@ -269,6 +209,8 @@ const wiraBotFlow = ai.defineFlow(
     return text;
   }
 );
+
+main().catch(console.error);
 
 // --- TEST RUNNER ---
 // This part actually executes the code when you run the file
@@ -307,5 +249,32 @@ async function main() {
   console.log("Response:", res6);
 }
 
-main().catch(console.error);
+//////////////// main().catch(console.error); /////////////////////
 
+// --- THE CLOUD FUNCTION ENDPOINT ---
+export const wiraChat = onRequest({ cors: true }, async (req, res) => {
+  // Ensure we only accept POST requests
+  if (req.method !== "POST") {
+    res.status(405).send("Method Not Allowed");
+    return;
+  }
+
+  try {
+    // Extract payload from Flutter frontend
+    const { userId, message, receiptId } = req.body;
+
+    if (!userId || !message) {
+      res.status(400).json({ error: "Missing required fields: userId and message" });
+      return;
+    }
+
+    // Execute the Genkit flow
+    const reply = await wiraBotFlow({ userId, message, receiptId });
+    
+    // Send response back to Flutter
+    res.status(200).json({ reply });
+  } catch (error: any) {
+    console.error("Agent execution error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
