@@ -56,11 +56,18 @@ class ReceiptUploadNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       print('📤 Starting upload flow...');
       
-      // 1. Upload to Firebase Storage
-      final imageUrl = await _storage.uploadReceiptImage(imageBytes, _userId!);
+      // 1. Try client-side Storage upload (non-fatal)
+      // Note: The Cloud Function also uploads to Storage server-side,
+      // so this is a nice-to-have backup, not required.
+      try {
+        await _storage.uploadReceiptImage(imageBytes, _userId!);
+      } catch (storageError) {
+        print('⚠️ Client storage upload failed (non-fatal): $storageError');
+        print('   The Cloud Function will handle storage upload instead.');
+      }
       
-      // 2. Process with Genkit (passing imageUrl)
-      // Genkit processes and saves to Firestore automatically
+      // 2. Process with Genkit - this is the critical step
+      // Genkit processes, uploads image, and saves to Firestore automatically
       final receipt = await _genkit.processReceiptHttp(imageBytes, _userId!);
       
       print('✅ Receipt processed & saved: ${receipt.id}');

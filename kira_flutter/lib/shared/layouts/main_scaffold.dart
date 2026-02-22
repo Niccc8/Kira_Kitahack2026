@@ -4,11 +4,15 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/constants/colors.dart';
+import '../../core/constants/spacing.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../widgets/floating_ai_button.dart';
 import '../widgets/profile_avatar.dart';
+import '../widgets/report_export_notifier.dart';
 import '../../features/chat/presentation/kira_ai_chat.dart';
+import '../../data/services/genkit_service.dart';
 
 /// Main scaffold wrapper for all screens
 class MainScaffold extends StatefulWidget {
@@ -75,13 +79,29 @@ class _MainScaffoldState extends State<MainScaffold> {
               if (widget.showProfileAvatar)
                 const ProfileAvatar(),
               
+              // Export report button (slides in beside AI button on Reports page)
+              if (widget.showAiButton)
+                const _AnimatedExportButton(),
+
               // Floating AI button
               if (widget.showAiButton)
                 FloatingAiButton(onPressed: _openAiChat),
               
               // AI Chat overlay
               if (_isAiChatOpen)
-                KiraAIChat(onClose: _closeAiChat),
+                KiraAIChat(
+                  onClose: _closeAiChat,
+                  onSendMessage: (message) {
+                    final uid = FirebaseAuth.instance.currentUser?.uid;
+                    if (uid == null) {
+                      return Future.value('Please sign in to use the chatbot.');
+                    }
+                    return GenkitService().sendChatMessage(
+                      userId: uid,
+                      message: message,
+                    );
+                  },
+                ),
             ],
           ),
         ),
@@ -90,6 +110,133 @@ class _MainScaffoldState extends State<MainScaffold> {
           ? const KiraBottomNav() 
           : null,
       extendBody: true,
+    );
+  }
+}
+
+/// Animated export button that appears beside the AI chatbot button
+/// only when the Reports screen is active.
+class _AnimatedExportButton extends StatefulWidget {
+  const _AnimatedExportButton();
+
+  @override
+  State<_AnimatedExportButton> createState() => _AnimatedExportButtonState();
+}
+
+class _AnimatedExportButtonState extends State<_AnimatedExportButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnim;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+    _scaleAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOutBack);
+    _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0.5, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    // Listen to notifier changes
+    reportExportNotifier.addListener(_onNotifierChanged);
+    reportExportingNotifier.addListener(_onExportingChanged);
+
+    // Set initial state
+    if (reportExportNotifier.value != null) {
+      _controller.value = 1.0;
+    }
+  }
+
+  void _onNotifierChanged() {
+    if (reportExportNotifier.value != null) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  void _onExportingChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    reportExportNotifier.removeListener(_onNotifierChanged);
+    reportExportingNotifier.removeListener(_onExportingChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      bottom: 90, // Same vertical as AI button
+      right: 20 + KiraSpacing.fabSize + 12, // Left of AI button with gap
+      child: SlideTransition(
+        position: _slideAnim,
+        child: FadeTransition(
+          opacity: _fadeAnim,
+          child: ScaleTransition(
+            scale: _scaleAnim,
+            child: GestureDetector(
+              onTap: () {
+                final callback = reportExportNotifier.value;
+                if (callback != null && !reportExportingNotifier.value) {
+                  callback();
+                }
+              },
+              child: Container(
+                width: KiraSpacing.fabSize,
+                height: KiraSpacing.fabSize,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      KiraColors.success.withValues(alpha: 0.9),
+                      KiraColors.success,
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: KiraColors.success.withValues(alpha: 0.35),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                    BoxShadow(
+                      color: KiraColors.success.withValues(alpha: 0.2),
+                      blurRadius: 24,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: reportExportingNotifier.value
+                      ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.file_download_outlined,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

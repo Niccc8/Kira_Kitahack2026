@@ -66,6 +66,61 @@ class GenkitService {
       rethrow;
     }
   }
+
+  // ════════════════════════════════════════════════════════
+  //  CHATBOT — wiraChat endpoint (from chatbot branch)
+  //  Completely separate from the OCR processReceiptHttp above.
+  // ════════════════════════════════════════════════════════
+
+  /// Send a chat message to the Kira AI chatbot (wiraBot Genkit flow).
+  ///
+  /// [userId]    – Firebase Auth UID of the current user
+  /// [message]   – The user's chat message
+  /// [receiptId] – Optional receipt ID for contextual questions
+  ///
+  /// Returns the AI assistant's reply as a plain string.
+  Future<String> sendChatMessage({
+    required String userId,
+    required String message,
+    String? receiptId,
+  }) async {
+    try {
+      print('💬 Sending chat to wiraBot...');
+      print('   User: $userId');
+      print('   Message: $message');
+      if (receiptId != null) print('   Receipt context: $receiptId');
+
+      final body = <String, dynamic>{
+        'userId': userId,
+        'message': message,
+      };
+      if (receiptId != null) body['receiptId'] = receiptId;
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/wiraChat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(
+        const Duration(seconds: 60), // Agent tool calls may take a while
+        onTimeout: () {
+          throw Exception('Chat request timed out');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final reply = json['reply'] as String? ?? json['text'] as String? ?? '';
+        print('✅ Kira replied (${reply.length} chars)');
+        return reply;
+      } else {
+        print('❌ Chat error ${response.statusCode}: ${response.body}');
+        throw Exception('Chat API returned status ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Chat service error: $e');
+      rethrow;
+    }
+  }
   
   /// Check if Genkit API is available
   Future<bool> healthCheck() async {

@@ -26,6 +26,27 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
   String _period = 'Year';
   int _selectedScope = 2;
   
+  /// Filter receipts by period
+  List<Receipt> _filterByPeriod(List<Receipt> receipts) {
+    final now = DateTime.now();
+    switch (_period) {
+      case 'Today':
+        return receipts.where((r) =>
+          r.date.year == now.year && r.date.month == now.month && r.date.day == now.day
+        ).toList();
+      case 'Week':
+        final weekAgo = now.subtract(const Duration(days: 7));
+        return receipts.where((r) => r.date.isAfter(weekAgo)).toList();
+      case 'Month':
+        return receipts.where((r) =>
+          r.date.year == now.year && r.date.month == now.month
+        ).toList();
+      case 'Year':
+      default:
+        return receipts.where((r) => r.date.year == now.year).toList();
+    }
+  }
+  
   // Scope info (static)
   final List<Map<String, dynamic>> _scopeInfo = [
     {'id': 1, 'name': 'Scope 1', 'label': 'Direct', 'icon': Icons.factory_outlined, 'color': KiraColors.scope1},
@@ -40,9 +61,11 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
     
     return receiptsAsync.when(
       data: (allReceipts) {
+        // Apply period filter
+        final receipts = _filterByPeriod(allReceipts);
         // Calculate emissions in kg (no conversion)
-        final totalCO2 = allReceipts.fold(0.0, (sum, r) => sum + r.co2Kg);
-        final scopeReceipts = allReceipts.where((r) => r.scope == _selectedScope).toList();
+        final totalCO2 = receipts.fold(0.0, (sum, r) => sum + r.co2Kg);
+        final scopeReceipts = receipts.where((r) => r.scope == _selectedScope).toList();
         final scopeCO2 = scopeReceipts.fold(0.0, (sum, r) => sum + r.co2Kg);
         final currentScope = _scopeInfo.firstWhere((s) => s['id'] == _selectedScope);
         

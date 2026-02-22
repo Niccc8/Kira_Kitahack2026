@@ -4,6 +4,7 @@
 /// Gemini AI extraction, and recent uploads list.
 library;
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,17 +13,17 @@ import '../../../core/constants/colors.dart';
 import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
 import '../../../shared/widgets/kira_card.dart';
-import '../../../shared/widgets/kira_button.dart';
 import '../../../shared/widgets/kira_badge.dart';
+import '../../../shared/widgets/kira_button.dart';
+import '../../../shared/widgets/item_detail_modal.dart';
 import '../../../providers/receipt_providers.dart';
 import '../../../providers/auth_providers.dart';
 import '../../../data/models/receipt.dart';
-import '../../receipts/presentation/receipt_detail_screen.dart';
 
 /// Scan screen implementation
 class ScanScreen extends ConsumerStatefulWidget {
   const ScanScreen({super.key});
-
+  
   @override
   ConsumerState<ScanScreen> createState() => _ScanScreenState();
 }
@@ -34,7 +35,10 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   Future<void> _pickImage(ImageSource source) async {
     try {
       print('📸 Starting image picker...');
-      final XFile? image = await _picker.pickImage(source: source);
+      final XFile? image = await _picker.pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.rear,
+      );
       
       print('📸 Image picker result: ${image?.path ?? "null"}');
       
@@ -143,9 +147,9 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
           // Upload Zone
           _buildUploadZone(),
           
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           
-          // AI Info Card
+          // AI Info — Gemini icon
           _buildAiInfoCard(),
           
           const SizedBox(height: 24),
@@ -190,96 +194,104 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
           width: 2,
         ),
       ),
-      child: Column(
-        children: [
-          if (_isProcessing) ...[
-            const CircularProgressIndicator(color: KiraColors.primary500),
-            const SizedBox(height: 16),
-            Text(
-              'Processing with Gemini AI...',
-              style: KiraTypography.bodyMedium.copyWith(
-                color: KiraColors.primary400,
-              ),
-            ),
-          ] else ...[
-            const Icon(
-              Icons.camera_alt_outlined,
-              size: 32,
-              color: KiraColors.primary400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Tap to scan receipt',
-              style: KiraTypography.bodyMedium.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'JPG, PNG • Automatic AI extraction',
-              style: KiraTypography.bodySmall.copyWith(
-                color: KiraColors.textTertiary,
-                fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // Buttons
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+      child: _isProcessing
+          ? _buildProcessingAnimation()
+          : Column(
               children: [
-                KiraButton.primary(
-                  label: 'Camera',
-                  icon: Icons.camera_alt,
-                  onPressed: () => _pickImage(ImageSource.camera),
+                const Icon(
+                  Icons.camera_alt_outlined,
+                  size: 32,
+                  color: KiraColors.primary400,
                 ),
-                const SizedBox(width: 12),
-                KiraButton.secondary(
-                  label: 'Gallery',
-                  icon: Icons.photo_library,
-                  onPressed: () => _pickImage(ImageSource.gallery),
+                const SizedBox(height: 16),
+                Text(
+                  'Tap to scan receipt',
+                  style: KiraTypography.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'JPG, PNG • Automatic AI extraction',
+                  style: KiraTypography.bodySmall.copyWith(
+                    color: KiraColors.textTertiary,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    KiraButton.primary(
+                      label: 'Camera',
+                      icon: Icons.camera_alt,
+                      onPressed: () => _pickImage(ImageSource.camera),
+                    ),
+                    const SizedBox(width: 12),
+                    KiraButton.secondary(
+                      label: 'Gallery',
+                      icon: Icons.photo_library,
+                      onPressed: () => _pickImage(ImageSource.gallery),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ],
+    );
+  }
+  
+  /// Centered Gemini sparkle animation for processing state
+  Widget _buildProcessingAnimation() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 8),
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: _GeminiSparkleAnimation(),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Analyzing receipt...',
+            style: KiraTypography.bodySmall.copyWith(
+              color: KiraColors.textTertiary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
   
-  /// AI info card
+  /// AI info card — Gemini sparkle icon in green
   Widget _buildAiInfoCard() {
-    return KiraCard(
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.smart_toy_outlined,
-            size: 20,
-            color: KiraColors.success,
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [KiraColors.primary400, KiraColors.primary500, KiraColors.success],
+          ).createShader(bounds),
+          child: const Icon(
+            Icons.auto_awesome,
+            size: 16,
+            color: Colors.white,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: RichText(
-              text: TextSpan(
-                style: KiraTypography.bodySmall.copyWith(
-                  color: KiraColors.textSecondary,
-                  fontSize: 13,
-                ),
-                children: const [
-                  TextSpan(
-                    text: 'Gemini AI ',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  TextSpan(
-                    text: 'extracts vendor, amount, and calculates carbon using Malaysian emission factors.',
-                  ),
-                ],
-              ),
-            ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          'Powered by Gemini AI',
+          style: KiraTypography.bodySmall.copyWith(
+            color: KiraColors.textTertiary,
+            fontSize: 12,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
   
@@ -336,9 +348,14 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: InkWell(
           onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => ReceiptDetailScreen(receipt: receipt),
+            // Use the same ItemDetailModal popup as the emissions page
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              builder: (context) => ItemDetailModal(
+                receipt: receipt,
+                type: DetailType.emission,
               ),
             );
           },
@@ -507,5 +524,66 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
       default:
         return KiraColors.textSecondary;
     }
+  }
+}
+
+/// Animated Gemini-style sparkle icon with pulsing scale effect
+class _GeminiSparkleAnimation extends StatefulWidget {
+  @override
+  State<_GeminiSparkleAnimation> createState() => _GeminiSparkleAnimationState();
+}
+
+class _GeminiSparkleAnimationState extends State<_GeminiSparkleAnimation>
+    with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOutQuart),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _pulseAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _pulseAnimation.value,
+          child: child,
+        );
+      },
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          colors: [
+            KiraColors.primary400,
+            KiraColors.primary500,
+            KiraColors.success,
+            KiraColors.primary400,
+          ],
+          stops: [0.0, 0.33, 0.66, 1.0],
+        ).createShader(bounds),
+        child: const Icon(
+          Icons.auto_awesome,
+          size: 48,
+          color: Colors.white,
+        ),
+      ),
+    );
   }
 }

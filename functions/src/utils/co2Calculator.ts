@@ -21,7 +21,10 @@ interface Item {
  * - Materials: kg CO2 per RM spent (varies by material type)
  */
 export function calculateCO2(item: Item): number {
-  const { category, quantity, unit, price } = item;
+  const category = item.category || 'other';
+  const quantity = item.quantity || 1;
+  const unit = item.unit || 'pcs';
+  const price = item.price || 0;
 
   switch (category) {
     case 'electricity':

@@ -36,7 +36,9 @@ interface GITAInfo {
  * - Tier 3: 40% tax allowance (moderate green tech)
  */
 export function checkGITAEligibility(item: Item): GITAInfo {
-  const { name, category, price } = item;
+  const name = item.name || '';
+  const category = item.category || 'other';
+  const price = item.price || 0;
   const nameLower = name.toLowerCase();
 
   // Check for solar/renewable energy

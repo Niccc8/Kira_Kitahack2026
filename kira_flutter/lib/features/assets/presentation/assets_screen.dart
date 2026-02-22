@@ -27,6 +27,27 @@ class AssetsScreen extends ConsumerStatefulWidget {
 
 class _AssetsScreenState extends ConsumerState<AssetsScreen> {
   String _period = 'Year';
+  
+  /// Filter receipts by period
+  List<Receipt> _filterByPeriod(List<Receipt> receipts) {
+    final now = DateTime.now();
+    switch (_period) {
+      case 'Today':
+        return receipts.where((r) =>
+          r.date.year == now.year && r.date.month == now.month && r.date.day == now.day
+        ).toList();
+      case 'Week':
+        final weekAgo = now.subtract(const Duration(days: 7));
+        return receipts.where((r) => r.date.isAfter(weekAgo)).toList();
+      case 'Month':
+        return receipts.where((r) =>
+          r.date.year == now.year && r.date.month == now.month
+        ).toList();
+      case 'Year':
+      default:
+        return receipts.where((r) => r.date.year == now.year).toList();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,8 +55,9 @@ class _AssetsScreenState extends ConsumerState<AssetsScreen> {
     
     return receiptsAsync.when(
       data: (allReceipts) {
-        // Filter for GITA-eligible receipts
-        final gitaReceipts = allReceipts.where((r) => r.gitaEligible).toList();
+        // Apply period filter, then filter for GITA-eligible
+        final periodReceipts = _filterByPeriod(allReceipts);
+        final gitaReceipts = periodReceipts.where((r) => r.gitaEligible).toList();
         final totalSavings = gitaReceipts.fold(0.0, (sum, r) => sum + r.gitaAllowance);
         
         return SingleChildScrollView(
