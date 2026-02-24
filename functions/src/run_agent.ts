@@ -16,7 +16,7 @@ process.env.GCLOUD_PROJECT = 'demo-wira';
 admin.initializeApp();
 const db = admin.firestore(); // Firestore database instance
 
-// Initialize Genkit
+// Initialize Genkit 
 const ai = genkit({
   plugins: [googleAI()],
   model: googleAI.model('gemini-2.5-flash'), // Changed to 1.5 as 2.5 is not standard yet
@@ -125,10 +125,11 @@ const industryBenchmarkTool = ai.defineTool(
   {
     name: 'getIndustryBenchmark',
     description: 'Use this tool ONLY when the user asks how they compare to competitors, what the industry average is, or if their carbon emissions are "good" or "bad" relative to others.',
-    inputSchema: z.object({ userId: z.string() }),
+    inputSchema: z.object({}),
     outputSchema: z.object({ userIntensity: z.number(), industryAverage: z.number(), performance: z.string() }),
   },
-  async ({ userId }) => {
+  async () => {
+    const userId = "user123";
     console.log(`[TOOL] Benchmarking User: ${userId}`);
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
@@ -183,7 +184,7 @@ const wiraBotFlow = ai.defineFlow(
   async ({ userId, message, receiptId}) => {
     const userDoc = await db.collection('users').doc(userId).get();
     const userData = userDoc.data();
-    const userProfile = userData ? `Industry: ${userData.industry}, Annual Revenue: RM${userData.annualRevenue}, Total Emissions: ${userData.totalcarbonemission}t.` : "Guest User";
+    const userProfile = userData ? `UserID: ${userId}, Industry: ${userData.industry}, Annual Revenue: RM${userData.annualRevenue}, Total Emissions: ${userData.totalcarbonemission}t.` : "Guest User";
     
     const receiptContext = await getReceiptContext(userId, receiptId);
     console.log(`\n--- Processing Request for ${userId} ---`);
@@ -218,8 +219,8 @@ async function main() {
   const userId = 'user123';
 
   // TEST 1: General Chat - No Tool Usage Chit Chat
-  // const response1 = await wiraBotFlow({ userId, message: "Hello, who are you?" });
-  // console.log("Response 1:", response1);
+  const response1 = await wiraBotFlow({ userId, message: "Hello, who are you?" });
+  console.log("Response 1:", response1);
 
   // TEST 2: Tool Usage - calls searchMyHijau tool
   // const response2 = await wiraBotFlow({ userId, message: "I need to buy a solar panel." });
@@ -239,42 +240,43 @@ async function main() {
   // const res5 = await wiraBotFlow({ userId, message: "How does my carbon footprint compare to other manufacturers?" });
   // console.log("Response:", res5);
 
-  console.log("\n--- TEST 6: Invoice Context ---");
-  // User selects the invoice and asks for help
-  const res6 = await wiraBotFlow({ 
-      userId, 
-      message: "How can I reduce the carbon from this bill?", 
-      invoiceId: 'invoice_abc' // <--- Simulating dropdown selection
-  });
-  console.log("Response:", res6);
+  // console.log("\n--- TEST 6: Invoice Context ---");
+  // // User selects the invoice and asks for help
+  // const res6 = await wiraBotFlow({ 
+  //     userId, 
+  //     message: "How can I reduce the carbon from this bill?", 
+  //     receiptId: 'receipt_001' // <--- Simulating dropdown selection
+  // });
+  // console.log("Response:", res6);
+
 }
 
 //////////////// main().catch(console.error); /////////////////////
 
 // --- THE CLOUD FUNCTION ENDPOINT ---
-export const wiraChat = onRequest({ cors: true }, async (req, res) => {
-  // Ensure we only accept POST requests
-  if (req.method !== "POST") {
-    res.status(405).send("Method Not Allowed");
-    return;
-  }
+// export const wiraChat = onRequest({ cors: true }, async (req, res) => {
+//   // Ensure we only accept POST requests
+//   if (req.method !== "POST") {
+//     res.status(405).send("Method Not Allowed");
+//     return;
+//   }
 
-  try {
-    // Extract payload from Flutter frontend
-    const { userId, message, receiptId } = req.body;
+//   try {
+//     // Extract payload from Flutter frontend
+//     const { userId, message, receiptId } = req.body;
 
-    if (!userId || !message) {
-      res.status(400).json({ error: "Missing required fields: userId and message" });
-      return;
-    }
+//     if (!userId || !message) {
+//       res.status(400).json({ error: "Missing required fields: userId and message" });
+//       return;
+//     }
 
-    // Execute the Genkit flow
-    const reply = await wiraBotFlow({ userId, message, receiptId });
+//     // Execute the Genkit flow
+//     const reply = await wiraBotFlow({ userId, message, receiptId });
     
-    // Send response back to Flutter
-    res.status(200).json({ reply });
-  } catch (error: any) {
-    console.error("Agent execution error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-});
+//     // Send response back to Flutter
+//     res.status(200).json({ reply });
+//   } catch (error: any) {
+//     console.error("Agent execution error:", error);
+//     res.status(500).json({ error: "Internal Server Error" });
+//   }
+// });

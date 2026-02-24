@@ -36,7 +36,7 @@ i  Emulator UI already enabled with port: (automatic)
 - view emulator UI at http://127.0.0.1:4000/
 
 6. create mock dataset for testing
-- create seed.ts
+create seed.ts
 - run: npx ts-node seed.ts
 
 7. paste original code in index.ts
