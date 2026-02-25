@@ -2,20 +2,31 @@
 /// 
 /// Provides realistic mock receipt data for testing and development.
 /// Call uploadMockData() to populate Firebase with sample receipts.
+/// Images are uploaded to Firebase Storage under the user's path.
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../models/receipt.dart';
 import '../models/line_item.dart';
 
 class MockDataService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  /// Upload mock receipts to Firebase for a specific user
+  /// Upload mock receipts to Firebase for a specific user.
+  /// Also uploads demo receipt images to Firebase Storage.
   Future<void> uploadMockData(String userId) async {
     print('📦 Uploading mock data for user: $userId');
     
-    final mockReceipts = _generateMockReceipts(userId);
+    // Step 1: Upload demo images to Firebase Storage
+    print('🖼️ Uploading demo receipt images to Storage...');
+    final imageUrls = await _uploadDemoImages(userId);
     
+    // Step 2: Generate receipts with real Storage URLs
+    final mockReceipts = _generateMockReceipts(userId, imageUrls);
+    
+    // Step 3: Write receipts to Firestore
     for (final receipt in mockReceipts) {
       await _firestore
           .collection('users')
@@ -30,10 +41,54 @@ class MockDataService {
     print('🎉 Mock data upload complete! ${mockReceipts.length} receipts added.');
   }
 
-  /// Generate realistic mock receipts
-  List<Receipt> _generateMockReceipts(String userId) {
+  /// Upload the 3 demo receipt images to Firebase Storage.
+  /// Returns a map of { 'utility' | 'fuel' | 'invoice' : gs://URL }.
+  Future<Map<String, String>> _uploadDemoImages(String userId) async {
+    final assets = {
+      'utility': 'assets/images/utility_bill.png',
+      'fuel': 'assets/images/fuel_receipt.png',
+      'invoice': 'assets/images/office_invoice.png',
+    };
+
+    final urls = <String, String>{};
+
+    for (final entry in assets.entries) {
+      try {
+        // Read bundled asset bytes
+        final data = await rootBundle.load(entry.value);
+        final bytes = data.buffer.asUint8List();
+
+        // Upload to Storage under: receipts/demo/{userId}_{key}.png
+        final storagePath = 'receipts/demo/${userId}_${entry.key}.png';
+        final ref = _storage.ref().child(storagePath);
+
+        final metadata = SettableMetadata(
+          contentType: 'image/png',
+          customMetadata: {'userId': userId, 'type': 'demo_receipt'},
+        );
+
+        await ref.putData(bytes, metadata);
+
+        // Store the gs:// URL (StorageImage uses refFromURL → getData)
+        urls[entry.key] = 'gs://${_storage.bucket}/$storagePath';
+        print('  ✅ ${entry.key}: ${urls[entry.key]}');
+      } catch (e) {
+        print('  ⚠️ Failed to upload ${entry.key} image: $e');
+        // Fallback: no image
+        urls[entry.key] = '';
+      }
+    }
+
+    return urls;
+  }
+
+  /// Generate realistic mock receipts with Firebase Storage image URLs
+  List<Receipt> _generateMockReceipts(String userId, Map<String, String> imgs) {
     final now = DateTime.now();
-    
+    final utilityImg = imgs['utility'] ?? '';
+    final fuelImg = imgs['fuel'] ?? '';
+    final invoiceImg = imgs['invoice'] ?? '';
+
     return [
       // 1. Electricity Bill - Scope 2
       Receipt(
@@ -41,7 +96,7 @@ class MockDataService {
         vendor: 'Tenaga Nasional Berhad (TNB)',
         date: DateTime(now.year, now.month - 1, 15),
         total: 850.00,
-        imageUrl: 'https://picsum.photos/seed/tnb/400/600',
+        imageUrl: utilityImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -49,7 +104,7 @@ class MockDataService {
             quantity: 2500.0,
             unit: 'kWh',
             price: 0.34,
-            co2Kg: 1750.0, // 0.7 kg CO2/kWh
+            co2Kg: 1750.0,
             scope: 2,
             category: 'utilities',
             gitaEligible: false,
@@ -64,7 +119,7 @@ class MockDataService {
         vendor: 'Petronas Station',
         date: DateTime(now.year, now.month - 1, 20),
         total: 320.50,
-        imageUrl: 'https://picsum.photos/seed/fuel/400/600',
+        imageUrl: fuelImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -72,7 +127,7 @@ class MockDataService {
             quantity: 150.0,
             unit: 'L',
             price: 2.14,
-            co2Kg: 405.0, // 2.7 kg CO2/L  
+            co2Kg: 405.0,
             scope: 1,
             category: 'transport',
             gitaEligible: false,
@@ -87,7 +142,7 @@ class MockDataService {
         vendor: 'AirAsia',
         date: DateTime(now.year, now.month - 2, 10),
         total: 450.00,
-        imageUrl: 'https://picsum.photos/seed/flight/400/600',
+        imageUrl: fuelImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -95,7 +150,7 @@ class MockDataService {
             quantity: 1.0,
             unit: 'ticket',
             price: 450.00,
-            co2Kg: 180.0, // ~90 kg per flight
+            co2Kg: 180.0,
             scope: 3,
             category: 'transport',
             gitaEligible: false,
@@ -110,7 +165,7 @@ class MockDataService {
         vendor: 'Green Energy Solutions Sdn Bhd',
         date: DateTime(now.year, now.month - 2, 5),
         total: 15500.00,
-        imageUrl: 'https://picsum.photos/seed/solar/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -118,13 +173,13 @@ class MockDataService {
             quantity: 1.0,
             unit: 'system',
             price: 15500.00,
-            co2Kg: 500.0, // Manufacturing + transport + installation
+            co2Kg: 500.0,
             scope: 2,
             category: 'utilities',
             gitaEligible: true,
             gitaTier: 1,
             gitaCategory: 'Solar PV System',
-            gitaAllowance: 3100.00, // 20% GITA allowance
+            gitaAllowance: 3100.00,
           ),
         ],
       ),
@@ -135,7 +190,7 @@ class MockDataService {
         vendor: 'Office Depot',
         date: DateTime(now.year, now.month, 3),
         total: 280.00,
-        imageUrl: 'https://picsum.photos/seed/office/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -169,7 +224,7 @@ class MockDataService {
         vendor: 'Gas Malaysia',
         date: DateTime(now.year, now.month - 3, 28),
         total: 680.00,
-        imageUrl: 'https://picsum.photos/seed/gas/400/600',
+        imageUrl: utilityImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -177,7 +232,7 @@ class MockDataService {
             quantity: 350.0,
             unit: 'm³',
             price: 1.94,
-            co2Kg: 735.0, // 2.1 kg CO2/m³
+            co2Kg: 735.0,
             scope: 1,
             category: 'utilities',
             gitaEligible: false,
@@ -192,7 +247,7 @@ class MockDataService {
         vendor: 'Alam Flora Waste Management',
         date: DateTime(now.year, now.month - 4, 12),
         total: 420.00,
-        imageUrl: 'https://picsum.photos/seed/waste/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -215,7 +270,7 @@ class MockDataService {
         vendor: 'ChargEV',
         date: DateTime(now.year, now.month, 8),
         total: 45.00,
-        imageUrl: 'https://picsum.photos/seed/ev/400/600',
+        imageUrl: fuelImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -229,7 +284,7 @@ class MockDataService {
             gitaEligible: true,
             gitaTier: 2,
             gitaCategory: 'Electric Vehicle',
-            gitaAllowance: 9.00, // Small GITA benefit
+            gitaAllowance: 9.00,
           ),
         ],
       ),
@@ -240,7 +295,7 @@ class MockDataService {
         vendor: 'Industrial Supplies Co',
         date: DateTime(now.year, now.month - 5, 22),
         total: 3200.00,
-        imageUrl: 'https://picsum.photos/seed/materials/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -248,7 +303,7 @@ class MockDataService {
             quantity: 500.0,
             unit: 'kg',
             price: 5.00,
-            co2Kg: 900.0, // 1.8 kg CO2/kg steel
+            co2Kg: 900.0,
             scope: 3,
             category: 'materials',
             gitaEligible: false,
@@ -259,7 +314,7 @@ class MockDataService {
             quantity: 200.0,
             unit: 'kg',
             price: 9.00,
-            co2Kg: 2200.0, // 11 kg CO2/kg aluminum
+            co2Kg: 2200.0,
             scope: 3,
             category: 'materials',
             gitaEligible: false,
@@ -274,7 +329,7 @@ class MockDataService {
         vendor: 'Air Selangor',
         date: DateTime(now.year, now.month - 1, 5),
         total: 125.00,
-        imageUrl: 'https://picsum.photos/seed/water/400/600',
+        imageUrl: utilityImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -282,7 +337,7 @@ class MockDataService {
             quantity: 350.0,
             unit: 'm³',
             price: 0.36,
-            co2Kg: 0.7, // Very low emissions
+            co2Kg: 0.7,
             scope: 3,
             category: 'utilities',
             gitaEligible: false,
@@ -297,7 +352,7 @@ class MockDataService {
         vendor: 'EcoLite Solutions',
         date: DateTime(now.year, now.month - 3, 18),
         total: 2800.00,
-        imageUrl: 'https://picsum.photos/seed/led/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -305,13 +360,13 @@ class MockDataService {
             quantity: 100.0,
             unit: 'units',
             price: 28.00,
-            co2Kg: 50.0, // Manufacturing + packaging + transport
+            co2Kg: 50.0,
             scope: 2,
             category: 'utilities',
             gitaEligible: true,
             gitaTier: 2,
             gitaCategory: 'Energy Efficiency',
-            gitaAllowance: 560.00, // 20% GITA
+            gitaAllowance: 560.00,
           ),
         ],
       ),
@@ -322,7 +377,7 @@ class MockDataService {
         vendor: 'Shell Station',
         date: DateTime(now.year, now.month, 12),
         total: 95.00,
-        imageUrl: 'https://picsum.photos/seed/shell/400/600',
+        imageUrl: fuelImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -330,7 +385,7 @@ class MockDataService {
             quantity: 40.0,
             unit: 'L',
             price: 2.38,
-            co2Kg: 92.0, // 2.3 kg CO2/L
+            co2Kg: 92.0,
             scope: 1,
             category: 'transport',
             gitaEligible: false,
@@ -339,13 +394,13 @@ class MockDataService {
         ],
       ),
       
-      // 13. [NEW] Green Supplies Multi-Item - Scope 3 & GITA
+      // 13. Green Supplies Multi-Item - Scope 3 & GITA
       Receipt(
         id: 'mock_${DateTime.now().millisecondsSinceEpoch}_13',
         vendor: 'Sustainable Packaging Sdn Bhd',
         date: DateTime(now.year, now.month, 2),
         total: 2450.00,
-        imageUrl: 'https://picsum.photos/seed/packaging/400/600',
+        imageUrl: invoiceImg,
         createdAt: now,
         lineItems: [
           LineItem(
@@ -356,7 +411,7 @@ class MockDataService {
             co2Kg: 120.0,
             scope: 3,
             category: 'materials',
-            gitaEligible: true, // Example GITA eligibility
+            gitaEligible: true,
             gitaTier: 2,
             gitaCategory: 'Green Packaging',
             gitaAllowance: 340.00,

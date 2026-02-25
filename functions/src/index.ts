@@ -1,12 +1,20 @@
 import { enableFirebaseTelemetry } from '@genkit-ai/firebase';
 import * as functions from 'firebase-functions';
-import { onCall, onRequest } from 'firebase-functions/v2/https'; // Use V2 for better performance
+import { Request, Response } from 'express';
+import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { processReceiptFlow } from './flows/processReceipt';
 import { wiraBotFlow } from './flows/chatAgent';
 
 // Note: Ensure googleAI is initialized inside your flow file 
 // or a shared genkit config to avoid "Plugin already registered" errors.
 enableFirebaseTelemetry();
+
+// ─── Helper: sets CORS headers on every response (even errors) ───────────────
+function setCORSHeaders(res: Response) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
 
 // ═══════════════════════════════════════════════════════════
 //  GENKIT FLOW 1: AI OCR — Receipt Processing
@@ -17,8 +25,8 @@ enableFirebaseTelemetry();
  * Automatically handles auth context and CORS
  */
 export const processReceipt = onCall({
-  memory: "1GiB", // OCR usually needs xmore memory
-  timeoutSeconds: 120, // Gemini calls can take a few seconds
+  memory: "1GiB",
+  timeoutSeconds: 120,
 }, async (request) => {
   const { userId, imageBytes } = request.data;
 
@@ -36,8 +44,16 @@ export const processReceipt = onCall({
 /**
  * HTTP Request Function (Standard Webhook/REST)
  */
-export const processReceiptHttp = onRequest({ cors: true }, async (req, res) => {
-  // Check method
+export const processReceiptHttp = onRequest({ cors: true }, async (req: Request, res: Response) => {
+  // Set CORS headers first — before any async work — so they're present even on errors
+  setCORSHeaders(res);
+
+  // Handle browser preflight (OPTIONS) requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -46,14 +62,14 @@ export const processReceiptHttp = onRequest({ cors: true }, async (req, res) => 
   try {
     const { userId, imageBytes } = req.body;
     if (!userId || !imageBytes) {
-      res.status(400).send('Missing required fields');
+      res.status(400).json({ error: 'Missing required fields: userId and imageBytes' });
       return;
     }
 
     const result = await processReceiptFlow({ userId, imageBytes });
     res.status(200).json(result);
   } catch (error: any) {
-    console.error('Error:', error);
+    console.error('OCR Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -67,7 +83,16 @@ export const processReceiptHttp = onRequest({ cors: true }, async (req, res) => 
  * Body: { userId: string, message: string, receiptId?: string }
  * Returns: { reply: string }
  */
-export const wiraChat = onRequest({ cors: true }, async (req, res) => {
+export const wiraChat = onRequest({ cors: true }, async (req: Request, res: Response) => {
+  // Set CORS headers first — before any async work — so they're present even on errors
+  setCORSHeaders(res);
+
+  // Handle browser preflight (OPTIONS) requests
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -85,7 +110,7 @@ export const wiraChat = onRequest({ cors: true }, async (req, res) => {
     res.status(200).json({ reply });
   } catch (error: any) {
     console.error('Agent execution error:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 });
 
@@ -93,6 +118,7 @@ export const wiraChat = onRequest({ cors: true }, async (req, res) => {
 //  Health Check
 // ═══════════════════════════════════════════════════════════
 
-export const health = onRequest({ cors: true }, (req, res) => {
+export const health = onRequest({ cors: true }, (req: Request, res: Response) => {
+  setCORSHeaders(res);
   res.status(200).json({ status: 'healthy', service: 'kira-backend' });
 });

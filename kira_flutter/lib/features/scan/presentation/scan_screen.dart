@@ -16,6 +16,8 @@ import '../../../shared/widgets/kira_card.dart';
 import '../../../shared/widgets/kira_badge.dart';
 import '../../../shared/widgets/kira_button.dart';
 import '../../../shared/widgets/item_detail_modal.dart';
+import '../../../shared/widgets/storage_image.dart';
+import '../../../shared/widgets/receipt_image_viewer.dart';
 import '../../../providers/receipt_providers.dart';
 import '../../../providers/auth_providers.dart';
 import '../../../data/models/receipt.dart';
@@ -404,6 +406,12 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
   }
 
   Widget _buildReceiptThumb(String? userId, Receipt receipt, {required String category, required int scope}) {
+    Widget fallbackIcon = Icon(
+      _getCategoryIcon(category),
+      size: 20,
+      color: _getScopeColor(scope),
+    );
+
     Widget frame(Widget child) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(10),
@@ -422,75 +430,17 @@ class _ScanScreenState extends ConsumerState<ScanScreen> {
 
     final url = receipt.imageUrl;
     if (url != null && url.trim().isNotEmpty) {
-      return frame(
-        Image.network(
-          url,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Icon(
-            _getCategoryIcon(category),
-            size: 20,
-            color: _getScopeColor(scope),
-          ),
-        ),
+      // Use StorageImage (getData) to bypass CORS — no raw XHR to storage bucket
+      return GestureDetector(
+        onTap: () => ReceiptImageViewer.show(context, imageUrl: url),
+        child: frame(StorageImage(url: url, fit: BoxFit.cover, fallback: fallbackIcon)),
       );
     }
 
-    if (userId == null || userId.trim().isEmpty) {
-      return frame(
-        Icon(
-          _getCategoryIcon(category),
-          size: 20,
-          color: _getScopeColor(scope),
-        ),
-      );
-    }
-
-    final path = 'users/$userId/receipts/${receipt.id}.jpg';
-    final futureUrl = FirebaseStorage.instance.ref(path).getDownloadURL();
-
-    return FutureBuilder<String>(
-      future: futureUrl,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return frame(
-            const Center(
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: KiraColors.primary500,
-                ),
-              ),
-            ),
-          );
-        }
-
-        final resolved = snapshot.data;
-        if (snapshot.hasError || resolved == null || resolved.trim().isEmpty) {
-          return frame(
-            Icon(
-              _getCategoryIcon(category),
-              size: 20,
-              color: _getScopeColor(scope),
-            ),
-          );
-        }
-
-        return frame(
-          Image.network(
-            resolved,
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Icon(
-              _getCategoryIcon(category),
-              size: 20,
-              color: _getScopeColor(scope),
-            ),
-          ),
-        );
-      },
-    );
+    // No imageUrl in receipt — fall back to category icon immediately
+    return frame(fallbackIcon);
   }
+
   
   /// Get icon based on category
   IconData _getCategoryIcon(String category) {

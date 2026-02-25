@@ -12,8 +12,10 @@ import '../../core/constants/spacing.dart';
 import '../../core/constants/typography.dart';
 import 'kira_card.dart';
 import 'kira_badge.dart';
+import 'receipt_image_viewer.dart';
 import '../../data/models/receipt.dart';
 import '../../data/models/line_item.dart';
+import 'storage_image.dart';
 
 enum DetailType { gita, emission }
 
@@ -31,20 +33,21 @@ class ItemDetailModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Full width glassmorphism container matching KiraAIChat
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      width: double.infinity,
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: Container(
-            decoration: BoxDecoration(
-              color: KiraColors.bgCardSolid, // Dark solid/glass hybrid base
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-              border: Border.all(color: KiraColors.glassBorder),
-            ),
+    final topPadding = MediaQuery.of(context).padding.top + 40; // status bar + breathing room
+    return Padding(
+      padding: EdgeInsets.only(top: topPadding), // Keeps modal away from the top brim
+      child: Container(
+        width: double.infinity,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              decoration: BoxDecoration(
+                color: KiraColors.bgCardSolid,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border.all(color: KiraColors.glassBorder),
+              ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -55,7 +58,8 @@ class ItemDetailModal extends StatelessWidget {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2), // Lighter handle
+                      color: Colors.white.withOpacity(0.2),
+
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -120,24 +124,51 @@ class ItemDetailModal extends StatelessWidget {
                         const SizedBox(height: 32),
                         
                         // Image at Bottom
-                        if (receipt.imageUrl != null) ...[
+                        if (receipt.imageUrl != null && receipt.imageUrl!.trim().isNotEmpty) ...[
                           Text('RECEIPT/INVOICE', style: KiraTypography.sectionTitle),
                           const SizedBox(height: 12),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.network(
-                              receipt.imageUrl!,
-                              height: 200,
-                              width: double.infinity,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                height: 100,
-                                width: double.infinity,
-                                color: Colors.grey.withOpacity(0.1),
-                                child: const Center(
-                                  child: Icon(Icons.broken_image, color: Colors.grey),
+                          GestureDetector(
+                            onTap: () => ReceiptImageViewer.show(context, imageUrl: receipt.imageUrl!),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: SizedBox(
+                                    height: 200,
+                                    width: double.infinity,
+                                    child: StorageImage(
+                                      url: receipt.imageUrl!,
+                                      fit: BoxFit.cover,
+                                      fallback: Container(
+                                        color: Colors.grey.withOpacity(0.1),
+                                        child: const Center(
+                                          child: Icon(Icons.broken_image, color: Colors.grey),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
+                                // Expand hint overlay
+                                Positioned(
+                                  right: 8,
+                                  bottom: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.5),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.zoom_out_map_rounded, color: Colors.white.withOpacity(0.8), size: 14),
+                                        const SizedBox(width: 4),
+                                        Text('Tap to view', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 10)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -147,6 +178,7 @@ class ItemDetailModal extends StatelessWidget {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),

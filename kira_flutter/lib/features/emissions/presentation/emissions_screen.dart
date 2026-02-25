@@ -10,6 +10,8 @@ import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
 import '../../../shared/widgets/kira_card.dart';
 import '../../../shared/widgets/item_detail_modal.dart';
+import '../../../shared/widgets/storage_image.dart';
+import '../../../shared/widgets/receipt_image_viewer.dart';
 import '../../../shared/widgets/period_selector.dart';
 import '../../../providers/receipt_providers.dart';
 import '../../../data/models/receipt.dart';
@@ -270,34 +272,33 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
       ],
     );
   }
-  
+
   Widget _buildReceiptItem(Receipt receipt, Color scopeColor) {
-    // Get icon based on category
-    IconData icon = Icons.receipt;
+    // Category icon as fallback if no image available
+    IconData icon;
     switch (receipt.category.toLowerCase()) {
-      case 'utilities':
-        icon = Icons.bolt;
-        break;
-      case 'transport':
-        icon = Icons.directions_car;
-        break;
-      case 'materials':
-        icon = Icons.factory;
-        break;
-      case 'waste':
-        icon = Icons.delete_outline;
-        break;
-      case 'office':
-        icon = Icons.business_center;
-        break;
-      case 'travel':
-        icon = Icons.flight;
-        break;
-      default:
-        icon = Icons.receipt_long;
-        break;
+      case 'utilities': icon = Icons.bolt; break;
+      case 'transport': icon = Icons.directions_car; break;
+      case 'materials': icon = Icons.factory; break;
+      case 'waste': icon = Icons.delete_outline; break;
+      case 'office': icon = Icons.business_center; break;
+      case 'travel': icon = Icons.flight; break;
+      default: icon = Icons.receipt_long; break;
     }
-    
+
+    // Build thumbnail: use StorageImage(getData) to bypass CORS, fallback to icon
+    final Widget fallbackIcon = Icon(icon, size: 20, color: scopeColor);
+    final Widget thumb;
+    final url = receipt.imageUrl;
+    if (url != null && url.trim().isNotEmpty) {
+      thumb = GestureDetector(
+        onTap: () => ReceiptImageViewer.show(context, imageUrl: url),
+        child: _buildThumbFrame(StorageImage(url: url, fit: BoxFit.cover, fallback: fallbackIcon)),
+      );
+    } else {
+      thumb = _buildThumbFrame(fallbackIcon);
+    }
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: InkWell(
@@ -317,8 +318,8 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              // Icon
-              Icon(icon, size: 20, color: scopeColor),
+              // Receipt thumbnail (photo or category icon fallback)
+              thumb,
               const SizedBox(width: 12),
               
               // Content
@@ -348,6 +349,22 @@ class _EmissionsScreenState extends ConsumerState<EmissionsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildThumbFrame(Widget child) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: Colors.white.withValues(alpha: 0.05),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: child,
       ),
     );
   }

@@ -5,7 +5,10 @@ import '../models/receipt.dart';
 
 class GenkitService {
   // TODO: Replace with your teammate's Genkit API URL
-  static const String baseUrl = 'https://us-central1-kira26.cloudfunctions.net';
+  // Production:
+  // static const String baseUrl = 'https://us-central1-kira26.cloudfunctions.net';
+  // Local emulator:
+  static const String baseUrl = 'http://127.0.0.1:5001/kira26/us-central1';
   
   /// Process receipt image with Genkit API
   /// 

@@ -101,6 +101,22 @@ class _MainScaffoldState extends State<MainScaffold> {
                       message: message,
                     );
                   },
+                  onProcessImage: (imageBytes) async {
+                    final uid = FirebaseAuth.instance.currentUser?.uid;
+                    if (uid == null) {
+                      return 'Please sign in to use receipt processing.';
+                    }
+                    // Step 1: OCR — process the image via Genkit
+                    final receipt = await GenkitService().processReceiptHttp(imageBytes, uid);
+                    
+                    // Step 2: Chat — ask Kira about the newly processed receipt
+                    final reply = await GenkitService().sendChatMessage(
+                      userId: uid,
+                      message: 'I just scanned a receipt. Please analyze it and suggest ways to reduce its carbon footprint.',
+                      receiptId: receipt.id,
+                    );
+                    return reply;
+                  },
                 ),
             ],
           ),

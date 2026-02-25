@@ -1,11 +1,14 @@
 /// Kira AI Chat - Bottom Sheet
 /// 
 /// Chat interface matching React KiraAI.jsx.
-/// Prepared for Genkit backend integration.
+/// Supports image attachment: user picks image → stages it as preview →
+/// user types optional message → sends image + message together.
 library;
 
 import 'dart:ui';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
@@ -20,6 +23,8 @@ I can help you:
 • Find GITA tax savings
 • Understand your emissions
 
+📎 You can also attach receipt/invoice photos for instant analysis!
+
 What would you like to know?''',
 );
 
@@ -30,10 +35,12 @@ enum ChatRole { user, assistant }
 class ChatMessage {
   final ChatRole role;
   final String content;
-  
+  final Uint8List? imageBytes; // Optional image preview for user messages
+
   const ChatMessage({
     required this.role,
     required this.content,
+    this.imageBytes,
   });
 }
 
@@ -45,11 +52,16 @@ class KiraAIChat extends StatefulWidget {
   /// Optional: Custom send message handler for backend integration
   /// Returns the AI response as a Future<String>
   final Future<String> Function(String message)? onSendMessage;
+  
+  /// Optional: Process an attached image (OCR + chat with receipt context)
+  /// Takes image bytes, returns the AI response string
+  final Future<String> Function(Uint8List imageBytes)? onProcessImage;
 
   const KiraAIChat({
     super.key,
     required this.onClose,
     this.onSendMessage,
+    this.onProcessImage,
   });
 
   @override
@@ -61,6 +73,10 @@ class _KiraAIChatState extends State<KiraAIChat> {
   final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [_initialMessage];
   bool _isLoading = false;
+  final ImagePicker _picker = ImagePicker();
+
+  // Staged image — picked but not yet sent
+  Uint8List? _stagedImageBytes;
 
   @override
   void dispose() {
@@ -69,30 +85,53 @@ class _KiraAIChatState extends State<KiraAIChat> {
     super.dispose();
   }
 
+  /// Send message (with optional staged image)
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    final hasImage = _stagedImageBytes != null;
     
+    // Need either text or an image to send
+    if (text.isEmpty && !hasImage) return;
+    
+    final imageToSend = _stagedImageBytes;
+    final messageText = hasImage
+        ? (text.isEmpty ? '📎 Attached a receipt for analysis' : text)
+        : text;
+
     setState(() {
-      _messages.add(ChatMessage(role: ChatRole.user, content: text));
+      _messages.add(ChatMessage(
+        role: ChatRole.user,
+        content: messageText,
+        imageBytes: imageToSend,
+      ));
       _controller.clear();
+      _stagedImageBytes = null;
       _isLoading = true;
     });
     
     _scrollToBottom();
     
     String response;
-    if (widget.onSendMessage != null) {
-      // Use provided handler (for backend integration)
+    
+    if (hasImage && widget.onProcessImage != null) {
+      // Has an image → process via OCR pipeline
       try {
-        response = await widget.onSendMessage!(text);
+        response = await widget.onProcessImage!(imageToSend!);
+      } catch (e) {
+        response = 'Sorry, I couldn\'t process that image. Please try again with a clearer photo.';
+        print('❌ Image processing error in chat: $e');
+      }
+    } else if (widget.onSendMessage != null) {
+      // Text-only message → regular chat
+      try {
+        response = await widget.onSendMessage!(messageText);
       } catch (e) {
         response = 'Sorry, I encountered an error. Please try again.';
       }
     } else {
-      // Mock response for demo
+      // No backend → mock response
       await Future.delayed(const Duration(milliseconds: 800));
-      response = _getMockResponse();
+      response = hasImage ? _getMockImageResponse() : _getMockResponse();
     }
     
     setState(() {
@@ -102,7 +141,35 @@ class _KiraAIChatState extends State<KiraAIChat> {
     
     _scrollToBottom();
   }
-  
+
+  /// Pick an image — stages it in the input area, does NOT auto-send
+  Future<void> _pickImage() async {
+    try {
+      final XFile? picked = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      final bytes = await picked.readAsBytes();
+      
+      setState(() {
+        _stagedImageBytes = bytes;
+      });
+    } catch (e) {
+      print('❌ Image picker error: $e');
+    }
+  }
+
+  /// Remove the staged image
+  void _removeStagedImage() {
+    setState(() {
+      _stagedImageBytes = null;
+    });
+  }
+
   String _getMockResponse() {
     return '''Based on your data, I recommend focusing on your Scope 2 emissions (electricity) - they make up 55% of your footprint.
 
@@ -111,6 +178,20 @@ class _KiraAIChatState extends State<KiraAIChat> {
 2. LED retrofit for remaining lights (-3 tonnes)
 
 This could reduce your carbon tax by RM 2,800. Want details on any of these?''';
+  }
+
+  String _getMockImageResponse() {
+    return '''📋 **Receipt Analyzed!**
+
+I've processed your receipt and found:
+• **Vendor:** Sample Store Sdn Bhd
+• **Total:** RM 450.00
+• **CO₂ Impact:** ~12.5 kg
+
+The receipt has been saved to your records. Would you like me to:
+1. Find green alternatives to reduce emissions?
+2. Check for GITA tax incentive eligibility?
+3. Compare with your industry benchmarks?''';
   }
   
   void _scrollToBottom() {
@@ -163,7 +244,7 @@ This could reduce your carbon tax by RM 2,800. Want details on any of these?''';
                         // Messages
                         Expanded(child: _buildMessages()),
                         
-                        // Input
+                        // Input (with staged image preview)
                         _buildInput(),
                         
                         // Safe area padding
@@ -265,12 +346,31 @@ This could reduce your carbon tax by RM 2,800. Want details on any of these?''';
                     : Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Text(
-                message.content,
-                style: KiraTypography.bodySmall.copyWith(
-                  color: KiraColors.textPrimary,
-                  height: 1.4,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Image preview (if user attached an image)
+                  if (message.imageBytes != null) ...[
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(
+                        message.imageBytes!,
+                        width: double.infinity,
+                        height: 160,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Text content
+                  Text(
+                    message.content,
+                    style: KiraTypography.bodySmall.copyWith(
+                      color: KiraColors.textPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -329,47 +429,161 @@ This could reduce your carbon tax by RM 2,800. Want details on any of these?''';
   Widget _buildInput() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
+          // ── Staged image preview (if picked) ──
+          if (_stagedImageBytes != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              height: 80,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: KiraColors.glassBorder),
               ),
-              child: TextField(
-                controller: _controller,
-                style: KiraTypography.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'Ask Kira anything...',
-                  hintStyle: KiraTypography.bodySmall.copyWith(
-                    color: KiraColors.textTertiary,
+              child: Row(
+                children: [
+                  // Image thumbnail
+                  ClipRRect(
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(11)),
+                    child: Image.memory(
+                      _stagedImageBytes!,
+                      width: 80,
+                      height: 80,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                  const SizedBox(width: 12),
+                  // Label
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Receipt attached',
+                          style: KiraTypography.bodySmall.copyWith(
+                            color: KiraColors.primary400,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Type a message or send directly',
+                          style: TextStyle(
+                            color: KiraColors.textTertiary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                onSubmitted: (_) => _sendMessage(),
+                  // Remove button
+                  GestureDetector(
+                    onTap: _removeStagedImage,
+                    child: Container(
+                      width: 32,
+                      height: 32,
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: KiraColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: _sendMessage,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [KiraColors.primary500, KiraColors.primary600],
+          
+          // ── Input row ──
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // 📎 Image attachment button
+              GestureDetector(
+                onTap: _isLoading ? null : _pickImage,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  margin: const EdgeInsets.only(bottom: 2),
+                  decoration: BoxDecoration(
+                    color: _stagedImageBytes != null
+                        ? KiraColors.primary600.withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _stagedImageBytes != null
+                          ? KiraColors.primary400.withValues(alpha: 0.4)
+                          : KiraColors.glassBorder,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.attach_file_rounded,
+                    size: 18,
+                    color: _isLoading 
+                        ? KiraColors.textTertiary 
+                        : (_stagedImageBytes != null 
+                            ? KiraColors.primary400 
+                            : KiraColors.primary400),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(14),
               ),
-              child: const Icon(Icons.send, size: 18, color: Colors.white),
-            ),
+              const SizedBox(width: 8),
+              // Text input — multiline, wraps long text
+              Expanded(
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 120),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: KiraColors.glassBorder),
+                  ),
+                  child: TextField(
+                    controller: _controller,
+                    style: KiraTypography.bodyMedium,
+                    maxLines: null, // Allows multiline wrapping
+                    minLines: 1,
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: _stagedImageBytes != null
+                          ? 'Add a message (optional)...'
+                          : 'Ask Kira anything...',
+                      hintStyle: KiraTypography.bodySmall.copyWith(
+                        color: KiraColors.textTertiary,
+                      ),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Send button
+              GestureDetector(
+                onTap: _sendMessage,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  margin: const EdgeInsets.only(bottom: 2),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [KiraColors.primary500, KiraColors.primary600],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.send, size: 18, color: Colors.white),
+                ),
+              ),
+            ],
           ),
         ],
       ),

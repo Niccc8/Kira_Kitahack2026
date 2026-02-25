@@ -11,17 +11,19 @@ if (!admin.apps.length) {
 }
 
 const db = admin.firestore();
+// Prevent "undefined" Firestore errors when optional GITA fields are absent
+db.settings({ ignoreUndefinedProperties: true });
 const storage = admin.storage();
 
 // 1. Initialize Genkit properly
 const ai = genkit({
   plugins: [
-    googleAI({ 
-      apiKey: process.env.GOOGLE_GENAI_API_KEY 
+    googleAI({
+      apiKey: process.env.GOOGLE_GENAI_API_KEY
     })
   ],
   // Use the 2026 stable model ID
-  model: googleAI.model('gemini-2.5-flash'), 
+  model: googleAI.model('gemini-2.5-flash'),
 });
 
 // Improved Schema with descriptions to help Gemini's accuracy
@@ -64,9 +66,10 @@ export async function processReceiptFlow(input: {
       co2Kg,
       scope: determineScope(item.category),
       gitaEligible: gitaInfo.eligible,
-      gitaTier: gitaInfo.tier,
-      gitaCategory: gitaInfo.category,
-      gitaAllowance: gitaInfo.allowance,
+      // Use null (not undefined) so Firestore accepts non-eligible items
+      gitaTier: gitaInfo.tier ?? null,
+      gitaCategory: gitaInfo.category ?? null,
+      gitaAllowance: gitaInfo.allowance ?? null,
     };
   });
 
@@ -74,7 +77,7 @@ export async function processReceiptFlow(input: {
   const total = processedLineItems.reduce((sum, item) => sum + item.price, 0);
   // Ensure the date is valid; fallback to 'now' if OCR fails
   const parsedDate = isNaN(Date.parse(extractedData.date)) ? now : new Date(extractedData.date);
-  
+
   // Ensure vendor is not empty
   const vendor = extractedData.vendor?.trim() || 'Unknown Vendor';
 
@@ -131,12 +134,8 @@ async function extractReceiptData(imageBytes: string): Promise<ReceiptData> {
 /**
  * Helper: Upload Base64 to Firebase Storage
  * 
- * Note:
- * - We do NOT use signed URLs here because the Cloud Functions service account
- *   does not have `iam.serviceAccounts.signBlob` permission by default.
- * - Instead, we simply upload the file. The Flutter app then resolves the
- *   download URL client‑side via `FirebaseStorage.instance.ref(path).getDownloadURL()`,
- *   which uses Firebase Auth and your Storage rules.
+ * Returns a gs:// URI that the Flutter StorageImage widget resolves
+ * client-side via refFromURL().getData() — no signed URL needed.
  */
 async function uploadReceiptImage(userId: string, receiptId: string, base64: string): Promise<string | null> {
   try {
@@ -145,8 +144,7 @@ async function uploadReceiptImage(userId: string, receiptId: string, base64: str
     const buffer = Buffer.from(base64, 'base64');
 
     const file = bucket.file(filePath);
-    
-    // Upload without public ACL (uniform bucket-level access + Admin SDK)
+
     await file.save(buffer, {
       contentType: 'image/jpeg',
       metadata: {
@@ -156,13 +154,11 @@ async function uploadReceiptImage(userId: string, receiptId: string, base64: str
       },
     });
 
-    // We intentionally DO NOT generate a signed URL here to avoid requiring
-    // extra IAM permissions on the service account.
-    // Return null so the caller falls back to resolving via Storage path.
-    return null;
+    // Return gs:// URI — Flutter's StorageImage resolves this via getData()
+    return `gs://${bucket.name}/${filePath}`;
   } catch (err) {
     console.error('Storage Upload Failed:', err);
-    return null; // Return null but don't crash the whole flow
+    return null;
   }
 }
 

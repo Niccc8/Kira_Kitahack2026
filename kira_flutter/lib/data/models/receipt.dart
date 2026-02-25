@@ -161,10 +161,10 @@ class Receipt {
     return {
       'id': id,
       'vendor': vendor,
-      'date': date.toIso8601String(),
+      'date': date.toUtc().toIso8601String(),
       'total': total,
       'imageUrl': imageUrl,
-      'createdAt': createdAt.toIso8601String(),
+      'createdAt': createdAt.toUtc().toIso8601String(),
       'lineItems': lineItems.map((item) => item.toJson()).toList(),
     };
   }
