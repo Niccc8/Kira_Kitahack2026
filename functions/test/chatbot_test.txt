@@ -1,0 +1,37 @@
+// --- TEST RUNNER ---
+// This part actually executes the code when you run the file
+async function main() {
+  const userId = 'user123';
+
+  // TEST 1: General Chat - No Tool Usage Chit Chat
+  const response1 = await wiraBotFlow({ userId, message: "Hello, who are you?" });
+  console.log("Response 1:", response1);
+
+  // TEST 2: Tool Usage - calls searchMyHijau tool
+  // const response2 = await wiraBotFlow({ userId, message: "I need to buy a solar panel." });
+  // console.log("Response 2:", response2);
+
+  // TEST 3: Tool Usage (Tax Calculation)
+  // const response3 = await wiraBotFlow({ userId, message: "If the carbon tax is RM 35 per tonne, how much will I pay?" });
+  // console.log("Response 3:", response3);
+  
+  // TEST 4: Investment Simulator
+  // console.log("\n--- TEST 4: Investment Simulator ---");
+  // const res4 = await wiraBotFlow({ userId, message: "Is it worth investing in solar panels?" });
+  // console.log("Response:", res4);
+
+  // TEST 5: Industry Benchmark
+  // console.log("\n--- TEST 5: Industry Benchmark ---");
+  // const res5 = await wiraBotFlow({ userId, message: "How does my carbon footprint compare to other manufacturers?" });
+  // console.log("Response:", res5);
+
+  // console.log("\n--- TEST 6: Invoice Context ---");
+  // // User selects the invoice and asks for help
+  // const res6 = await wiraBotFlow({ 
+  //     userId, 
+  //     message: "How can I reduce the carbon from this bill?", 
+  //     receiptId: 'receipt_001' // <--- Simulating dropdown selection
+  // });
+  // console.log("Response:", res6);
+
+}

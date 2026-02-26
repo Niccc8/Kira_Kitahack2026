@@ -90,22 +90,18 @@ class _MainScaffoldState extends State<MainScaffold> {
               // AI Chat overlay
               if (_isAiChatOpen)
                 KiraAIChat(
+                  userId: FirebaseAuth.instance.currentUser?.uid ?? 'user123', // Fallback for demo
                   onClose: _closeAiChat,
-                  onSendMessage: (message) {
-                    final uid = FirebaseAuth.instance.currentUser?.uid;
-                    if (uid == null) {
-                      return Future.value('Please sign in to use the chatbot.');
-                    }
+                  onSendMessage: (message, receiptId) {
+                    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'user123';
                     return GenkitService().sendChatMessage(
                       userId: uid,
                       message: message,
+                      receiptId: receiptId,
                     );
                   },
                   onProcessImage: (imageBytes) async {
-                    final uid = FirebaseAuth.instance.currentUser?.uid;
-                    if (uid == null) {
-                      return 'Please sign in to use receipt processing.';
-                    }
+                    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'user123';
                     // Step 1: OCR — process the image via Genkit
                     final receipt = await GenkitService().processReceiptHttp(imageBytes, uid);
                     

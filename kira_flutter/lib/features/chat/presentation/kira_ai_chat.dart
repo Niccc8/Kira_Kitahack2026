@@ -1,14 +1,14 @@
 /// Kira AI Chat - Bottom Sheet
 /// 
 /// Chat interface matching React KiraAI.jsx.
-/// Supports image attachment: user picks image → stages it as preview →
-/// user types optional message → sends image + message together.
+/// Supports image attachment and previously uploaded receipt context.
 library;
 
 import 'dart:ui';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/constants/colors.dart';
 import '../../../core/constants/spacing.dart';
 import '../../../core/constants/typography.dart';
@@ -48,10 +48,11 @@ class ChatMessage {
 class KiraAIChat extends StatefulWidget {
   /// Callback to close the sheet
   final VoidCallback onClose;
+  final String userId;
   
   /// Optional: Custom send message handler for backend integration
   /// Returns the AI response as a Future<String>
-  final Future<String> Function(String message)? onSendMessage;
+  final Future<String> Function(String message, String? receiptId)? onSendMessage;
   
   /// Optional: Process an attached image (OCR + chat with receipt context)
   /// Takes image bytes, returns the AI response string
@@ -60,6 +61,7 @@ class KiraAIChat extends StatefulWidget {
   const KiraAIChat({
     super.key,
     required this.onClose,
+    required this.userId,
     this.onSendMessage,
     this.onProcessImage,
   });
@@ -75,7 +77,7 @@ class _KiraAIChatState extends State<KiraAIChat> {
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
 
-  // Staged image — picked but not yet sent
+  String? _selectedReceiptId;
   Uint8List? _stagedImageBytes;
 
   @override
@@ -85,18 +87,18 @@ class _KiraAIChatState extends State<KiraAIChat> {
     super.dispose();
   }
 
-  /// Send message (with optional staged image)
+  /// Send message
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     final hasImage = _stagedImageBytes != null;
     
-    // Need either text or an image to send
     if (text.isEmpty && !hasImage) return;
     
     final imageToSend = _stagedImageBytes;
     final messageText = hasImage
         ? (text.isEmpty ? '📎 Attached a receipt for analysis' : text)
         : text;
+    final receiptId = _selectedReceiptId;
 
     setState(() {
       _messages.add(ChatMessage(
@@ -114,24 +116,20 @@ class _KiraAIChatState extends State<KiraAIChat> {
     String response;
     
     if (hasImage && widget.onProcessImage != null) {
-      // Has an image → process via OCR pipeline
       try {
         response = await widget.onProcessImage!(imageToSend!);
       } catch (e) {
         response = 'Sorry, I couldn\'t process that image. Please try again with a clearer photo.';
-        print('❌ Image processing error in chat: $e');
       }
     } else if (widget.onSendMessage != null) {
-      // Text-only message → regular chat
       try {
-        response = await widget.onSendMessage!(messageText);
+        response = await widget.onSendMessage!(messageText, receiptId);
       } catch (e) {
         response = 'Sorry, I encountered an error. Please try again.';
       }
     } else {
-      // No backend → mock response
       await Future.delayed(const Duration(milliseconds: 800));
-      response = hasImage ? _getMockImageResponse() : _getMockResponse();
+      response = "I'm sorry, I'm not connected to the backend right now.";
     }
     
     setState(() {
@@ -142,7 +140,6 @@ class _KiraAIChatState extends State<KiraAIChat> {
     _scrollToBottom();
   }
 
-  /// Pick an image — stages it in the input area, does NOT auto-send
   Future<void> _pickImage() async {
     try {
       final XFile? picked = await _picker.pickImage(
@@ -152,48 +149,17 @@ class _KiraAIChatState extends State<KiraAIChat> {
         imageQuality: 85,
       );
       if (picked == null) return;
-
       final bytes = await picked.readAsBytes();
-      
-      setState(() {
-        _stagedImageBytes = bytes;
-      });
+      setState(() => _stagedImageBytes = bytes);
     } catch (e) {
       print('❌ Image picker error: $e');
     }
   }
 
-  /// Remove the staged image
   void _removeStagedImage() {
-    setState(() {
-      _stagedImageBytes = null;
-    });
+    setState(() => _stagedImageBytes = null);
   }
 
-  String _getMockResponse() {
-    return '''Based on your data, I recommend focusing on your Scope 2 emissions (electricity) - they make up 55% of your footprint.
-
-**Quick wins:**
-1. Switch to TNB Green plan (-80 tonnes/year)
-2. LED retrofit for remaining lights (-3 tonnes)
-
-This could reduce your carbon tax by RM 2,800. Want details on any of these?''';
-  }
-
-  String _getMockImageResponse() {
-    return '''📋 **Receipt Analyzed!**
-
-I've processed your receipt and found:
-• **Vendor:** Sample Store Sdn Bhd
-• **Total:** RM 450.00
-• **CO₂ Impact:** ~12.5 kg
-
-The receipt has been saved to your records. Would you like me to:
-1. Find green alternatives to reduce emissions?
-2. Check for GITA tax incentive eligibility?
-3. Compare with your industry benchmarks?''';
-  }
-  
   void _scrollToBottom() {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
@@ -213,41 +179,29 @@ The receipt has been saved to your records. Would you like me to:
       child: Container(
         color: Colors.black54,
         child: GestureDetector(
-          onTap: () {}, // Prevent close on sheet tap
+          onTap: () {}, 
           child: DraggableScrollableSheet(
             initialChildSize: 0.7,
             minChildSize: 0.4,
             maxChildSize: 0.92,
             builder: (context, scrollController) {
               return ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
                   child: Container(
                     decoration: BoxDecoration(
                       color: KiraColors.bgCardSolid,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(28),
-                      ),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
                       border: Border.all(color: KiraColors.glassBorder),
                     ),
                     child: Column(
                       children: [
-                        // Handle
                         _buildHandle(),
-                        
-                        // Header
                         _buildHeader(),
-                        
-                        // Messages
+                        _buildReceiptDropdown(),
                         Expanded(child: _buildMessages()),
-                        
-                        // Input (with staged image preview)
                         _buildInput(),
-                        
-                        // Safe area padding
                         SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
                       ],
                     ),
@@ -264,8 +218,7 @@ The receipt has been saved to your records. Would you like me to:
   Widget _buildHandle() {
     return Container(
       margin: const EdgeInsets.only(top: 12, bottom: 8),
-      width: 40,
-      height: 4,
+      width: 40, height: 4,
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(2),
@@ -291,12 +244,59 @@ The receipt has been saved to your records. Would you like me to:
             icon: const Icon(Icons.close, size: 20),
             style: IconButton.styleFrom(
               backgroundColor: Colors.white.withValues(alpha: 0.08),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildReceiptDropdown() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.userId)
+            .collection('receipts')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          final docs = snapshot.data!.docs;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: KiraColors.glassBorder),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                dropdownColor: KiraColors.bgCardSolid,
+                hint: Text("Attach an Invoice (Optional)", style: KiraTypography.bodySmall.copyWith(color: KiraColors.textSecondary)),
+                value: _selectedReceiptId,
+                icon: Icon(Icons.receipt_long, color: KiraColors.textSecondary, size: 20),
+                items: [
+                  DropdownMenuItem(value: null, child: Text("None", style: KiraTypography.bodySmall.copyWith(color: KiraColors.textPrimary))),
+                  ...docs.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final vendor = data['vendor'] ?? "Unknown Vendor";
+                    final date = data['date'] ?? "";
+                    return DropdownMenuItem(
+                      value: doc.id,
+                      child: Text("$vendor - $date", style: KiraTypography.bodySmall.copyWith(color: KiraColors.textPrimary), overflow: TextOverflow.ellipsis),
+                    );
+                  }),
+                ],
+                onChanged: (value) => setState(() => _selectedReceiptId = value),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -307,9 +307,7 @@ The receipt has been saved to your records. Would you like me to:
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: _messages.length + (_isLoading ? 1 : 0),
       itemBuilder: (context, index) {
-        if (index == _messages.length && _isLoading) {
-          return _buildTypingIndicator();
-        }
+        if (index == _messages.length && _isLoading) return _buildTypingIndicator();
         return _buildMessageBubble(_messages[index]);
       },
     );
@@ -317,7 +315,6 @@ The receipt has been saved to your records. Would you like me to:
   
   Widget _buildMessageBubble(ChatMessage message) {
     final isUser = message.role == ChatRole.user;
-    
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -326,8 +323,7 @@ The receipt has been saved to your records. Would you like me to:
         children: [
           if (!isUser) ...[
             Container(
-              width: 28,
-              height: 28,
+              width: 28, height: 28,
               decoration: BoxDecoration(
                 color: KiraColors.success.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
@@ -336,50 +332,32 @@ The receipt has been saved to your records. Would you like me to:
             ),
             const SizedBox(width: 8),
           ],
-          
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: isUser 
-                    ? KiraColors.primary600 
-                    : Colors.white.withValues(alpha: 0.08),
+                color: isUser ? KiraColors.primary600 : Colors.white.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Image preview (if user attached an image)
                   if (message.imageBytes != null) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.memory(
-                        message.imageBytes!,
-                        width: double.infinity,
-                        height: 160,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.memory(message.imageBytes!, width: double.infinity, height: 160, fit: BoxFit.cover),
                     ),
                     const SizedBox(height: 8),
                   ],
-                  // Text content
-                  Text(
-                    message.content,
-                    style: KiraTypography.bodySmall.copyWith(
-                      color: KiraColors.textPrimary,
-                      height: 1.4,
-                    ),
-                  ),
+                  Text(message.content, style: KiraTypography.bodySmall.copyWith(color: KiraColors.textPrimary, height: 1.4)),
                 ],
               ),
             ),
           ),
-          
           if (isUser) ...[
             const SizedBox(width: 8),
             Container(
-              width: 28,
-              height: 28,
+              width: 28, height: 28,
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
@@ -398,8 +376,7 @@ The receipt has been saved to your records. Would you like me to:
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 28, height: 28,
             decoration: BoxDecoration(
               color: KiraColors.success.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
@@ -432,7 +409,6 @@ The receipt has been saved to your records. Would you like me to:
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Staged image preview (if picked) ──
           if (_stagedImageBytes != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -443,141 +419,79 @@ The receipt has been saved to your records. Would you like me to:
               ),
               child: Row(
                 children: [
-                  // Image thumbnail
                   ClipRRect(
                     borderRadius: const BorderRadius.horizontal(left: Radius.circular(11)),
-                    child: Image.memory(
-                      _stagedImageBytes!,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                    ),
+                    child: Image.memory(_stagedImageBytes!, width: 80, height: 80, fit: BoxFit.cover),
                   ),
                   const SizedBox(width: 12),
-                  // Label
                   Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Receipt attached',
-                          style: KiraTypography.bodySmall.copyWith(
-                            color: KiraColors.primary400,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        Text('Receipt attached', style: KiraTypography.bodySmall.copyWith(color: KiraColors.primary400, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 2),
-                        Text(
-                          'Type a message or send directly',
-                          style: TextStyle(
-                            color: KiraColors.textTertiary,
-                            fontSize: 11,
-                          ),
-                        ),
+                        Text('Type a message or send directly', style: TextStyle(color: KiraColors.textTertiary, fontSize: 11)),
                       ],
                     ),
                   ),
-                  // Remove button
                   GestureDetector(
                     onTap: _removeStagedImage,
                     child: Container(
-                      width: 32,
-                      height: 32,
+                      width: 32, height: 32,
                       margin: const EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.06),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 16,
-                        color: KiraColors.textSecondary,
-                      ),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(8)),
+                      child: Icon(Icons.close_rounded, size: 16, color: KiraColors.textSecondary),
                     ),
                   ),
                 ],
               ),
             ),
-          
-          // ── Input row ──
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // 📎 Image attachment button
               GestureDetector(
                 onTap: _isLoading ? null : _pickImage,
                 child: Container(
-                  width: 40,
-                  height: 40,
+                  width: 40, height: 40,
                   margin: const EdgeInsets.only(bottom: 2),
                   decoration: BoxDecoration(
-                    color: _stagedImageBytes != null
-                        ? KiraColors.primary600.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.06),
+                    color: _stagedImageBytes != null ? KiraColors.primary600.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: _stagedImageBytes != null
-                          ? KiraColors.primary400.withValues(alpha: 0.4)
-                          : KiraColors.glassBorder,
-                    ),
+                    border: Border.all(color: _stagedImageBytes != null ? KiraColors.primary400.withValues(alpha: 0.4) : KiraColors.glassBorder),
                   ),
-                  child: Icon(
-                    Icons.attach_file_rounded,
-                    size: 18,
-                    color: _isLoading 
-                        ? KiraColors.textTertiary 
-                        : (_stagedImageBytes != null 
-                            ? KiraColors.primary400 
-                            : KiraColors.primary400),
-                  ),
+                  child: Icon(Icons.attach_file_rounded, size: 18, color: KiraColors.primary400),
                 ),
               ),
               const SizedBox(width: 8),
-              // Text input — multiline, wraps long text
               Expanded(
                 child: Container(
                   constraints: const BoxConstraints(maxHeight: 120),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: KiraColors.glassBorder),
-                  ),
+                  decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(16), border: Border.all(color: KiraColors.glassBorder)),
                   child: TextField(
                     controller: _controller,
                     style: KiraTypography.bodyMedium,
-                    maxLines: null, // Allows multiline wrapping
+                    maxLines: null,
                     minLines: 1,
                     textInputAction: TextInputAction.newline,
                     keyboardType: TextInputType.multiline,
                     decoration: InputDecoration(
-                      hintText: _stagedImageBytes != null
-                          ? 'Add a message (optional)...'
-                          : 'Ask Kira anything...',
-                      hintStyle: KiraTypography.bodySmall.copyWith(
-                        color: KiraColors.textTertiary,
-                      ),
+                      hintText: _stagedImageBytes != null ? 'Add a message (optional)...' : 'Ask Kira anything...',
+                      hintStyle: KiraTypography.bodySmall.copyWith(color: KiraColors.textTertiary),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              // Send button
               GestureDetector(
                 onTap: _sendMessage,
                 child: Container(
-                  width: 44,
-                  height: 44,
+                  width: 44, height: 44,
                   margin: const EdgeInsets.only(bottom: 2),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [KiraColors.primary500, KiraColors.primary600],
-                    ),
+                    gradient: const LinearGradient(colors: [KiraColors.primary500, KiraColors.primary600]),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(Icons.send, size: 18, color: Colors.white),
@@ -591,11 +505,9 @@ The receipt has been saved to your records. Would you like me to:
   }
 }
 
-/// Animated typing dot
 class _TypingDot extends StatefulWidget {
   final int delay;
   const _TypingDot({required this.delay});
-
   @override
   State<_TypingDot> createState() => _TypingDotState();
 }
@@ -603,27 +515,20 @@ class _TypingDot extends StatefulWidget {
 class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
-
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    );
+    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _animation = Tween<double>(begin: 0.3, end: 1.0).animate(_controller);
-    
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _controller.repeat(reverse: true);
     });
   }
-
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
-
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -631,26 +536,22 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
       builder: (context, child) => Opacity(
         opacity: _animation.value,
         child: Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(
-            color: KiraColors.textSecondary,
-            borderRadius: BorderRadius.circular(3),
-          ),
+          width: 6, height: 6,
+          decoration: BoxDecoration(color: KiraColors.textSecondary, borderRadius: BorderRadius.circular(3)),
         ),
       ),
     );
   }
 }
 
-/// Helper function to show AI chat
-void showKiraAIChat(BuildContext context) {
+void showKiraAIChat(BuildContext context, {required String userId}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     barrierColor: Colors.black54,
     builder: (context) => KiraAIChat(
+      userId: userId,
       onClose: () => Navigator.of(context).pop(),
     ),
   );

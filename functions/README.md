@@ -27,6 +27,11 @@ Run locally with Firebase emulators:
 ```bash
 npm run serve
 ```
+## Seed Mock Database
+
+```bash
+npm run seed
+```
 
 ## Deployment
 

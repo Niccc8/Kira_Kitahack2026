@@ -3,7 +3,7 @@ import * as functions from 'firebase-functions';
 import { Request, Response } from 'express';
 import { onCall, onRequest } from 'firebase-functions/v2/https';
 import { processReceiptFlow } from './flows/processReceipt';
-import { wiraBotFlow } from './flows/chatAgent';
+import { wiraBotFlow } from './flows/wiraChat';
 
 // Note: Ensure googleAI is initialized inside your flow file 
 // or a shared genkit config to avoid "Plugin already registered" errors.
